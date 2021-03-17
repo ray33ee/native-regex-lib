@@ -16,6 +16,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Unfinished Ideas
 - Try to identify regexes that use backtracking, and warn user that backtracking is not supported 
 
+## [0.2.1] - 2021-03-17
+
+### Added
+- Support for escaped characters \n \t and \r in character classes
+
+### Removed
+- Tests module, as tests are now conducted with the [native-regex-tester](https://github.com/ray33ee/native-regex-tester) package
+
+### Fixed
+- Issue with passing 'nomatch' variable to LiteralSingle tokens
+
 ## [0.2.0] - 2021-03-16
 
 ### Added

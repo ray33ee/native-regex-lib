@@ -120,8 +120,10 @@ fn token_translate(token: & Token, capture_index: & mut usize, inforloop: bool) 
 
     match token {
         Token::LiteralSingle(character, repeater) => {
-            let nomatch = get_no_match(*repeater != RepeaterType::ExactlyOnce || inforloop);
-            Ok(envelope(format!("{}\n\nif text[index + counter] != {} {{ {} }}\n\ncounter += 1;\n\n", bounds_check(1), *character, nomatch), repeater, nomatch))
+            let outernomatch = get_no_match(inforloop);
+
+            let withinnomatch = get_no_match(*repeater != RepeaterType::ExactlyOnce || inforloop);
+            Ok(envelope(format!("{}\n\nif text[index + counter] != {} {{ {} }}\n\ncounter += 1;\n\n", bounds_check(1), *character, withinnomatch), repeater, outernomatch))
         },
         Token::LiteralList(list) => {
             let mut conditions = format!("text[index + counter] == {}", list[0]);

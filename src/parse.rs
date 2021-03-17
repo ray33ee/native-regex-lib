@@ -125,7 +125,20 @@ impl From<& [u8]> for CharacterSet {
                     set.push(RangeInclusive::new('_' as u8, '_' as u8));
                     index += 2;
                     continue;
-                }  else {
+                } else if slice[index+1] == 't' as u8 {
+                    set.push(RangeInclusive::new('\t' as u8, '\t' as u8));
+                    index += 2;
+                    continue;
+                } else if slice[index+1] == 'n' as u8 {
+                    set.push(RangeInclusive::new('\n' as u8, '\n' as u8));
+                    index += 2;
+                    continue;
+                } else if slice[index+1] == 'r' as u8 {
+                    set.push(RangeInclusive::new('\r' as u8, '\r' as u8));
+                    index += 2;
+                    continue;
+                }
+                else {
                     counter += 2;
                     slice[index+1]
                 }
@@ -262,7 +275,14 @@ impl Token {
 
                 if second_character == 's' as u8 || second_character == 'w' as u8 || second_character == 'd' as u8 {
                     (Token::CharacterClass(CharacterSet::from(&slice[0..2]), repeater.repeater), &slice[repeater.length+2..])
-                } else {
+                } else if second_character == 'n' as u8 {
+                    (Token::LiteralSingle('\n' as u8, repeater.repeater), &slice[repeater.length+2..])
+                } else if second_character == 't' as u8 {
+                    (Token::LiteralSingle('\t' as u8, repeater.repeater), &slice[repeater.length+2..])
+                } else if second_character == 'r' as u8 {
+                    (Token::LiteralSingle('\r' as u8, repeater.repeater), &slice[repeater.length+2..])
+                }
+                else {
                     (Token::LiteralSingle(second_character, repeater.repeater), &slice[repeater.length+2..])
                 }
             }
