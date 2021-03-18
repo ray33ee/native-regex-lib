@@ -138,6 +138,30 @@ impl NativeRegex {
         Split { finder: self.find_iter(text), last: 0 }
     }
 
+    pub fn replace<F>(&self, text: &str, rep: F) -> String
+    where
+    F: Fn(usize, & Captures) -> String {
+        let mut iter = self.captures_iter(text).enumerate().peekable();
+        if iter.peek().is_none() {
+            return String::from(text);
+        }
+
+
+        let mut new = String::with_capacity(text.len());
+        let mut last_match = 0;
+
+        for (i, capture) in iter {
+            let m = capture.get(0).unwrap();
+            new.push_str(&text[last_match..m.start]);
+            new.push_str(rep(i, & capture).as_str());
+            last_match = m.end;
+        }
+        new.push_str(&text[last_match..]);
+        new
+
+
+    }
+
 }
 
 impl<'t> Matches<'t> {

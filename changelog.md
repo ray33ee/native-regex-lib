@@ -5,16 +5,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### To Do
-- Make sure `CharacterSet::from` contains no overlapping ranges
-- Add a bunch of helper functions that act as a wrapper around the Native Regex function and implement as close to the `regex` crate as possible, including
- - Matching
- - Capturing
- - Regex sets
-- Add a validator for the function name to ensure that the name complies with the Rust naming system
+- Regex sets
+  - A set of `n` regexes should only loop through the text string one time, not `n` times.
+- Add a validator to `translate` function for the function name to ensure that the name complies with the Rust naming system
 - Support named captures (named captures are represented as maps from strings (the captures name) to integers (the captures index))
+- Better classes for character sets and ranges   
+  - Create a more sophisticated system for adding shorthand character classes and their complements.
+    - Define each shorthand as a set of ranges
+    - Automatically define the complement of the shorthand
+  - Create a more sophisticated CharacterSet that allows for negated character classes and correct shorthand negation  
+    - Implement a character set as a list of unions.
+    - Each union is a set of intersections 
+    - Each intersection is a RangeInclusive
+  - Make sure `CharacterSet::from` contains no overlapping ranges
+- Add a support for regex::Replacer-like trait
+- Add negated word boundary, \B
+- Clear warnings from generated code
 
 ### Unfinished Ideas
 - Try to identify regexes that use backtracking, and warn user that backtracking is not supported 
+
+## [0.2.2] - 2021-03-17
+
+### Added
+- Add support for negated classes like \S, \W, etc.
+- Added support for a `Fn(usize, & Captures) -> String` replacer 
+- Added support for word boundaries (\b)
 
 ## [0.2.1] - 2021-03-17
 

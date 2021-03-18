@@ -33,7 +33,7 @@ pub enum AnchorType {
 #[derive(Debug)]
 pub struct CharacterSet {
     pub inverted: bool,
-    pub set: Vec<RangeInclusive<u8>>
+    pub set: Vec<(bool, RangeInclusive<u8>)>
 }
 
 #[derive(Debug)]
@@ -55,19 +55,17 @@ pub struct NativeRegexAST {
 impl std::fmt::Display for CharacterSet {
 
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", if self.inverted { "inverted" } else { "not inverted" })?;
+        write!(f, "CharacterSet, {}", if self.inverted { "inverted" } else { "not inverted" })?;
 
-        for range in self.set.iter() {
+        for (negated, range) in self.set.iter() {
+            let negated = if *negated {"negated "} else {""};
+
             if *range.start() == *range.end() {
-                write!(f, ", {}", *range.start() as char)?;
+                write!(f, ", {}{}({})", negated, *range.start() as char, *range.start())?;
             } else {
-                write!(f, ", {}-{}", *range.start() as char, *range.end() as char)?;
+                write!(f, ", {}{}-{}({}-{})", negated, *range.start() as char, *range.end() as char, *range.start(), *range.end())?;
             }
         }
-
-
-
-
         Ok(())
     }
 
@@ -89,12 +87,12 @@ impl From<& [u8]> for CharacterSet {
         //Similarly if we have leading or trailing '-' add them and chop the string
         if slice[0] == '-' as u8 {
             slice = &slice[1..];
-            set.push(RangeInclusive::new('-' as u8, '-' as u8));
+            set.push((false, RangeInclusive::new('-' as u8, '-' as u8)));
         }
 
         if slice[slice.len() - 1] == '-' as u8 {
             slice = &slice[..slice.len()-1];
-            set.push(RangeInclusive::new('-' as u8, '-' as u8));
+            set.push((false, RangeInclusive::new('-' as u8, '-' as u8)));
         }
 
         let mut index = 0;
@@ -107,34 +105,54 @@ impl From<& [u8]> for CharacterSet {
             let ch = if slice[index] == '\\' as u8 {
 
                 if slice[index+1] == 'd' as u8 {
-                    set.push(RangeInclusive::new('0' as u8, '9' as u8));
+                    set.push((false, RangeInclusive::new('0' as u8, '9' as u8)));
+                    index += 2;
+                    continue;
+                } else if slice[index+1] == 'D' as u8 {
+                    set.push((false, RangeInclusive::new(0, '0' as u8 - 1)));
+                    set.push((false, RangeInclusive::new('9' as u8 + 1, 255)));
                     index += 2;
                     continue;
                 } else if slice[index+1] == 's' as u8 {
-                    set.push(RangeInclusive::new(' ' as u8, ' ' as u8));
-                    set.push(RangeInclusive::new('\t' as u8, '\t' as u8));
-                    set.push(RangeInclusive::new('\n' as u8, '\n' as u8));
-                    set.push(RangeInclusive::new('\r' as u8, '\r' as u8));
-                    set.push(RangeInclusive::new(12, 12)); //Form feed
+                    set.push((false, RangeInclusive::new(' ' as u8, ' ' as u8)));
+                    set.push((false, RangeInclusive::new('\t' as u8, '\t' as u8)));
+                    set.push((false, RangeInclusive::new('\n' as u8, '\n' as u8)));
+                    set.push((false, RangeInclusive::new('\r' as u8, '\r' as u8)));
+                    set.push((false, RangeInclusive::new(12, 12))); //Form feed
+                    index += 2;
+                    continue;
+                } else if slice[index+1] == 'S' as u8 {
+                    set.push((false, RangeInclusive::new(0, 8)));
+                    set.push((false, RangeInclusive::new(11, 11)));
+                    set.push((false, RangeInclusive::new(14, 31)));
+                    set.push((false, RangeInclusive::new(33, 255)));
                     index += 2;
                     continue;
                 } else if slice[index+1] == 'w' as u8 {
-                    set.push(RangeInclusive::new('A' as u8, 'Z' as u8));
-                    set.push(RangeInclusive::new('a' as u8, 'z' as u8));
-                    set.push(RangeInclusive::new('0' as u8, '9' as u8));
-                    set.push(RangeInclusive::new('_' as u8, '_' as u8));
+                    set.push((false, RangeInclusive::new('0' as u8, '9' as u8)));
+                    set.push((false, RangeInclusive::new('A' as u8, 'Z' as u8)));
+                    set.push((false, RangeInclusive::new('_' as u8, '_' as u8)));
+                    set.push((false, RangeInclusive::new('a' as u8, 'z' as u8)));
+                    index += 2;
+                    continue;
+                } else if slice[index+1] == 'W' as u8 {
+                    set.push((false, RangeInclusive::new(0, 47)));
+                    set.push((false, RangeInclusive::new(58, 64)));
+                    set.push((false, RangeInclusive::new(91, 94)));
+                    set.push((false, RangeInclusive::new(96, 96)));
+                    set.push((false, RangeInclusive::new(123, 255)));
                     index += 2;
                     continue;
                 } else if slice[index+1] == 't' as u8 {
-                    set.push(RangeInclusive::new('\t' as u8, '\t' as u8));
+                    set.push((false, RangeInclusive::new('\t' as u8, '\t' as u8)));
                     index += 2;
                     continue;
                 } else if slice[index+1] == 'n' as u8 {
-                    set.push(RangeInclusive::new('\n' as u8, '\n' as u8));
+                    set.push((false, RangeInclusive::new('\n' as u8, '\n' as u8)));
                     index += 2;
                     continue;
                 } else if slice[index+1] == 'r' as u8 {
-                    set.push(RangeInclusive::new('\r' as u8, '\r' as u8));
+                    set.push((false, RangeInclusive::new('\r' as u8, '\r' as u8)));
                     index += 2;
                     continue;
                 }
@@ -154,14 +172,14 @@ impl From<& [u8]> for CharacterSet {
 
                 //Get next token. If it's a '-' we have a range of characters
                 if slice[index + counter] == '-' as u8 {
-                    set.push(RangeInclusive::new(ch as u8, slice[index + counter + 1] as u8));
+                    set.push((false, RangeInclusive::new(ch as u8, slice[index + counter + 1] as u8)));
                     index += counter + 2;
                 } else {
-                    set.push(RangeInclusive::new(ch, ch));
+                    set.push((false, RangeInclusive::new(ch, ch)));
                     index += counter;
                 }
             } else {
-                set.push(RangeInclusive::new(ch, ch));
+                set.push((false, RangeInclusive::new(ch, ch)));
                 index += counter;
             }
 
@@ -273,7 +291,7 @@ impl Token {
             else {
                 let repeater = Repeater::from(&slice[2..]);
 
-                if second_character == 's' as u8 || second_character == 'w' as u8 || second_character == 'd' as u8 {
+                if second_character == 's' as u8 || second_character == 'w' as u8 || second_character == 'd' as u8 || second_character == 'D' as u8 || second_character == 'S' as u8 || second_character == 'W' as u8 {
                     (Token::CharacterClass(CharacterSet::from(&slice[0..2]), repeater.repeater), &slice[repeater.length+2..])
                 } else if second_character == 'n' as u8 {
                     (Token::LiteralSingle('\n' as u8, repeater.repeater), &slice[repeater.length+2..])

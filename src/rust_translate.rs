@@ -106,11 +106,17 @@ fn get_no_match(inforloop: bool) -> & 'static str {
     if inforloop { "break;" } else { "index += 1; continue;" }
 }
 
-fn range_to_condition(range: & RangeInclusive<u8>) -> String {
-    if range.start() == range.end() {
-        format!("text[index+counter] == {}", *range.start())
+fn range_to_condition(range: &(bool, RangeInclusive<u8>)) -> String {
+    let non_negated = if range.1.start() == range.1.end() {
+        format!("text[index+counter] == {}", *range.1.start())
     } else {
-        format!("text[index+counter] >= {} && text[index+counter] <= {}", *range.start(), *range.end())
+        format!("text[index+counter] >= {} && text[index+counter] <= {}", *range.1.start(), *range.1.end())
+    };
+
+    if range.0 {
+        format!("!({})", non_negated)
+    } else {
+        non_negated
     }
 }
 
@@ -140,7 +146,20 @@ fn token_translate(token: & Token, capture_index: & mut usize, inforloop: bool) 
                 Ok(String::from("if index != text.len()-1 { index += 1; continue; }"))
             },
             AnchorType::WordBorder => {
-                Ok(String::from("panic!(\"WORD BORDER NOT SUPPORTED\");"))
+                //Err(String::from("Word borders are not supported. Please see readme for more information."))
+                Ok(String::from("if index+counter != 0 && index+counter != str_text.len() {
+    if (word_class(text[index+counter-1]) || !word_class(text[index+counter])) &&
+        (!word_class(text[index+counter-1]) || word_class(text[index+counter])) {
+
+        index += 1; continue 'main;
+    }
+} else {
+
+    if index+counter == 0 && !word_class(text[0]) || index+counter == str_text.len() - 1 && !word_class(text[str_text.len() - 1]) {
+
+        index += 1; continue 'main;
+    }
+}"))
             }
         },
         Token::Alternation => {
@@ -231,6 +250,8 @@ pub fn {}(str_text: &str, start: usize) -> Option<Vec<Option<(usize, usize)>>> {
     let mut index = start;
 
     let mut captures = vec![None; {}];
+
+    let word_class = |ch: u8| {{ ch >= 48 && ch <= 57 || ch >= 65 && ch <= 90 || ch == 95 || ch >= 97 && ch <= 122 }};
 
     'main: while index < text.len() {{
 
