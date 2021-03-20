@@ -43,6 +43,8 @@ we can then use Rust to perform the bounds check. It is tempting to create these
 Native Regex does not support Unicode characters. For performance reasons it also does not check for them either. 
 Checking for unicode is the responsibility of the user.
 
+Unicode may be supported in the future, though this will require a substantial overhaul of the current system
+
 ## Backtracking
 
 Perhaps the next biggest limitation is lack of backtracking. Take the regex 
@@ -95,8 +97,9 @@ Lookarounds are not yet supported
 
 ## Free-Spacing
 
-Free-spacing is not yet supported since whitespace can be removed by the user.
+Free-spacing is not yet supported since whitespace can be removed by the user. Ignoring whitespace is not an issue, but capturing a match with ignored whitespace is.
+One of the ways Native Regex remains fast is by using slices for its captures. This would not be possible when capturing matches with ignored whitespace, so ignoring whitespace is not supported.
 
 ## Dot matching
 
-Dotmatching is dangerous at the best of times and shoud be avoided. Use negated character classes instead
+Dotmatching is dangerous at the best of times and should be avoided. Use negated character classes instead.

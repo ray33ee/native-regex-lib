@@ -1,5 +1,6 @@
 
-use std::ops::RangeInclusive;
+use crate::characterset::CharacterSet;
+use std::collections::HashMap;
 
 #[derive(Debug, PartialEq)]
 pub enum RepeaterType {
@@ -30,11 +31,11 @@ pub enum AnchorType {
     WordBorder, // \b
 }
 
-#[derive(Debug)]
+/*#[derive(Debug)]
 pub struct CharacterSet {
     pub inverted: bool,
     pub set: Vec<(bool, RangeInclusive<u8>)>
-}
+}*/
 
 #[derive(Debug)]
 pub enum Token {
@@ -42,7 +43,7 @@ pub enum Token {
     Anchor(AnchorType),
     LiteralSingle(u8, RepeaterType),
     LiteralList(Vec<u8>),
-    Group(NativeRegexAST, RepeaterType, GroupType),
+    Group(NativeRegexAST, RepeaterType, GroupType, Option<String>),
     DotMatch(RepeaterType),
     Alternation,
 }
@@ -52,145 +53,7 @@ pub struct NativeRegexAST {
     pub tokens: Vec<Token>
 }
 
-impl std::fmt::Display for CharacterSet {
 
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CharacterSet, {}", if self.inverted { "inverted" } else { "not inverted" })?;
-
-        for (negated, range) in self.set.iter() {
-            let negated = if *negated {"negated "} else {""};
-
-            if *range.start() == *range.end() {
-                write!(f, ", {}{}({})", negated, *range.start() as char, *range.start())?;
-            } else {
-                write!(f, ", {}{}-{}({}-{})", negated, *range.start() as char, *range.end() as char, *range.start(), *range.end())?;
-            }
-        }
-        Ok(())
-    }
-
-}
-
-impl From<& [u8]> for CharacterSet {
-    fn from(mut slice: & [u8]) -> Self {
-
-        let mut set = Vec::new();
-
-        //Look for a '^' and chop it off
-        let inverted = if slice[0] == '^' as u8 {
-            slice = &slice[1..];
-            true
-        } else {
-            false
-        };
-
-        //Similarly if we have leading or trailing '-' add them and chop the string
-        if slice[0] == '-' as u8 {
-            slice = &slice[1..];
-            set.push((false, RangeInclusive::new('-' as u8, '-' as u8)));
-        }
-
-        if slice[slice.len() - 1] == '-' as u8 {
-            slice = &slice[..slice.len()-1];
-            set.push((false, RangeInclusive::new('-' as u8, '-' as u8)));
-        }
-
-        let mut index = 0;
-
-        while index < slice.len() {
-
-            let mut counter = 0;
-
-            //Get current token
-            let ch = if slice[index] == '\\' as u8 {
-
-                if slice[index+1] == 'd' as u8 {
-                    set.push((false, RangeInclusive::new('0' as u8, '9' as u8)));
-                    index += 2;
-                    continue;
-                } else if slice[index+1] == 'D' as u8 {
-                    set.push((false, RangeInclusive::new(0, '0' as u8 - 1)));
-                    set.push((false, RangeInclusive::new('9' as u8 + 1, 255)));
-                    index += 2;
-                    continue;
-                } else if slice[index+1] == 's' as u8 {
-                    set.push((false, RangeInclusive::new(' ' as u8, ' ' as u8)));
-                    set.push((false, RangeInclusive::new('\t' as u8, '\t' as u8)));
-                    set.push((false, RangeInclusive::new('\n' as u8, '\n' as u8)));
-                    set.push((false, RangeInclusive::new('\r' as u8, '\r' as u8)));
-                    set.push((false, RangeInclusive::new(12, 12))); //Form feed
-                    index += 2;
-                    continue;
-                } else if slice[index+1] == 'S' as u8 {
-                    set.push((false, RangeInclusive::new(0, 8)));
-                    set.push((false, RangeInclusive::new(11, 11)));
-                    set.push((false, RangeInclusive::new(14, 31)));
-                    set.push((false, RangeInclusive::new(33, 255)));
-                    index += 2;
-                    continue;
-                } else if slice[index+1] == 'w' as u8 {
-                    set.push((false, RangeInclusive::new('0' as u8, '9' as u8)));
-                    set.push((false, RangeInclusive::new('A' as u8, 'Z' as u8)));
-                    set.push((false, RangeInclusive::new('_' as u8, '_' as u8)));
-                    set.push((false, RangeInclusive::new('a' as u8, 'z' as u8)));
-                    index += 2;
-                    continue;
-                } else if slice[index+1] == 'W' as u8 {
-                    set.push((false, RangeInclusive::new(0, 47)));
-                    set.push((false, RangeInclusive::new(58, 64)));
-                    set.push((false, RangeInclusive::new(91, 94)));
-                    set.push((false, RangeInclusive::new(96, 96)));
-                    set.push((false, RangeInclusive::new(123, 255)));
-                    index += 2;
-                    continue;
-                } else if slice[index+1] == 't' as u8 {
-                    set.push((false, RangeInclusive::new('\t' as u8, '\t' as u8)));
-                    index += 2;
-                    continue;
-                } else if slice[index+1] == 'n' as u8 {
-                    set.push((false, RangeInclusive::new('\n' as u8, '\n' as u8)));
-                    index += 2;
-                    continue;
-                } else if slice[index+1] == 'r' as u8 {
-                    set.push((false, RangeInclusive::new('\r' as u8, '\r' as u8)));
-                    index += 2;
-                    continue;
-                }
-                else {
-                    counter += 2;
-                    slice[index+1]
-                }
-
-
-
-            } else {
-                counter += 1;
-                slice[index]
-            };
-
-            if index + counter < slice.len() {
-
-                //Get next token. If it's a '-' we have a range of characters
-                if slice[index + counter] == '-' as u8 {
-                    set.push((false, RangeInclusive::new(ch as u8, slice[index + counter + 1] as u8)));
-                    index += counter + 2;
-                } else {
-                    set.push((false, RangeInclusive::new(ch, ch)));
-                    index += counter;
-                }
-            } else {
-                set.push((false, RangeInclusive::new(ch, ch)));
-                index += counter;
-            }
-
-        }
-
-        CharacterSet {
-            inverted,
-            set
-        }
-    }
-}
 
 impl From<& [u8]> for Repeater{
 
@@ -331,14 +194,39 @@ impl Token {
 
             let repeater = Repeater::from(&slice[close_index+1..]);
 
-            if slice[1] == '?' as u8 && slice[2] == ':' as u8 {
-                (Token::Group(NativeRegexAST::from(&slice[3..close_index]),
-                             repeater.repeater,
-                             GroupType::NonCapturing), &slice[close_index+repeater.length+1..])
+            if slice[1] == '?' as u8 {
+                if slice[2] == ':' as u8 {
+                    (Token::Group(NativeRegexAST::from(&slice[3..close_index]),
+                                  repeater.repeater,
+                                  GroupType::NonCapturing,
+                                  None), &slice[close_index+repeater.length+1..])
+                } else if slice[2] == 'P' as u8 && slice[3] == '<' as u8 {
+
+                    let mut position = 5;
+
+                    for (i, ch) in (&slice[4..]).iter().enumerate() {
+                        position = i + 4;
+                        if *ch == '>' as u8 {
+                            break;
+                        }
+                    }
+
+                    unsafe {
+                        (Token::Group(NativeRegexAST::from(&slice[position + 1..close_index]),
+                                      repeater.repeater,
+                                      GroupType::Capturing,
+                                      Some(String::from(std::str::from_utf8_unchecked(&slice[4..position])))), &slice[close_index + repeater.length + 1..])
+                    }
+
+                } else {
+                    panic!(format!("Group modifier {} not supported.", slice[2]))
+                }
+
             } else {
                 (Token::Group(NativeRegexAST::from(&slice[1..close_index]),
-                             repeater.repeater,
-                             GroupType::Capturing), &slice[close_index+repeater.length+1..])
+                              repeater.repeater,
+                              GroupType::Capturing,
+                              None), &slice[close_index+repeater.length+1..])
             }
 
 
@@ -393,22 +281,34 @@ impl Token {
 
 impl NativeRegexAST {
 
-    pub fn get_captures(& self) -> usize {
-        let mut total = 0;
+    pub fn get_captures(& self, start: usize) -> (usize, HashMap<String, usize>) {
+        let mut total = start; //We add one because on match we capture the entire match
+
+        let mut hash = HashMap::new();
 
         for token in self.tokens.iter() {
             match token {
-                Token::Group(ast, _, group) => match group {
-                    GroupType::Capturing => {
-                        total += ast.get_captures();
+                Token::Group(ast, _, group, name_option) => {
+
+                    if name_option.is_some() {
+                        hash.insert(name_option.as_ref().unwrap().clone(), total);
                     }
-                    _ => {}
+
+                    match group {
+                        GroupType::Capturing => {
+                            total += 1;
+                            let (count, table) = ast.get_captures(total);
+                            total = count;
+                            hash.extend(table);
+                        }
+                        _ => {}
+                    }
                 }
                 _ => {}
             }
         }
 
-        total+1 //We add one because on match we capture the entire match
+        (total, hash)
     }
 
     fn recur_tree(& self, level: usize) {
@@ -421,8 +321,8 @@ impl NativeRegexAST {
 
         for token in self.tokens.iter() {
             match token {
-                Token::Group(ast, repeater, group) => {
-                    println!("{}Group {:?} {:?}\n", tabs, repeater, group);
+                Token::Group(ast, repeater, group, name) => {
+                    println!("{}Group {:?} {:?} {:?}\n", tabs, repeater, group, name);
                     ast.recur_tree(level+1);
                 },
                 Token::LiteralList(list) => {
