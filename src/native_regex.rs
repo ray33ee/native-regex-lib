@@ -7,11 +7,6 @@ use std::vec::IntoIter;
 
 type NativeRegexLocations = Vec<Option<(usize, usize)>>;
 type NativeRegexReturn<'a> = Option<NativeRegexLocations>;
-type NativeRegexSignature = fn(& str, usize) -> NativeRegexReturn;
-
-pub struct NativeRegex {
-    regex: NativeRegexSignature
-}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Match<'t> {
@@ -20,14 +15,19 @@ pub struct Match<'t> {
     end: usize
 }
 
+
 #[derive(Copy, Clone)]
-pub struct Matches<'t> {
-    capture_match: CaptureMatches<'t>
+pub struct Matches<'t, 'r, R>
+    where R: NativeRegex
+{
+    capture_match: CaptureMatches<'t, 'r, R>
 }
 
 #[derive(Copy, Clone)]
-pub struct CaptureMatches<'t> {
-    regex: NativeRegexSignature,
+pub struct CaptureMatches<'t, 'r, R>
+where R: NativeRegex
+{
+    regex: & 'r R,
     text: & 't str,
     last_end: usize,
     last_match: Option<usize>
@@ -37,12 +37,14 @@ pub struct CaptureMatches<'t> {
 pub struct Captures<'t> {
     text: & 't str,
     locations: NativeRegexLocations,
-    named_groups: HashMap<String, usize>
+    named_groups: HashMap<& 'static str, usize>
 }
 
 #[derive(Copy, Clone)]
-pub struct Split<'t> {
-    finder: Matches<'t>,
+pub struct Split<'t, 'r, R>
+    where R: NativeRegex
+{
+    finder: Matches<'t, 'r, R>,
     last: usize
 }
 
@@ -82,20 +84,18 @@ impl<'t> From<Match<'t>> for Range<usize> {
     }
 }
 
-impl NativeRegex {
+pub trait NativeRegex: Sized {
 
-    pub fn new(regex: NativeRegexSignature) -> Self {
-        NativeRegex {
-            regex
-        }
+    fn regex_function(&self, text: & str, start: usize) -> NativeRegexReturn;
+
+    fn capture_names(&self) -> HashMap<& 'static str, usize>;
+
+    fn is_match(&self, text: &str) -> bool {
+        self.regex_function(text, 0).is_some()
     }
 
-    pub fn is_match(&self, text: &str) -> bool {
-        (self.regex)(text, 0).is_some()
-    }
-
-    pub fn find<'t>(&self, text: & 't str) -> Option<Match<'t>> {
-        match (self.regex)(text, 0) {
+    fn find<'t>(&self, text: & 't str) -> Option<Match<'t>> {
+        match self.regex_function(text, 0) {
             Some(matches) => {
                 let (start, end) = matches.get(0).unwrap().unwrap();
                 Some(Match::new (
@@ -106,39 +106,42 @@ impl NativeRegex {
         }
     }
 
-    pub fn find_iter<'t>(&self, text: & 't str) -> Matches<'t> {
+    fn find_iter<'t, 'r>(& 'r self, text: & 't str) -> Matches<'t, 'r, Self>
+         {
         Matches {
             capture_match: self.captures_iter(text)
         }
     }
 
-    pub fn captures<'t>(&self, text: & 't str) -> Option<Captures<'t>> {
-        match (self.regex)(text, 0) {
+    fn captures<'t>(&self, text: & 't str) -> Option<Captures<'t>> {
+        match self.regex_function(text, 0) {
             Some(captures) => {
                 Some(Captures {
                     text,
                     locations: captures,
-                    named_groups: HashMap::new()
+                    named_groups: self.capture_names().clone()
                 })
             }
             None => None
         }
     }
 
-    pub fn captures_iter<'t>(&self, text: & 't str) -> CaptureMatches<'t> {
+    fn captures_iter<'t, 'r>(& 'r self, text: & 't str) -> CaptureMatches<'t, 'r, Self>
+    {
+
         CaptureMatches {
-            regex: self.regex,
+            regex: &self,
             text,
             last_end: 0,
             last_match: None
         }
     }
 
-    pub fn split<'t>(&self, text: & 't str) -> Split<'t> {
+    fn split<'t, 'r>(& 'r self, text: & 't str) -> Split<'t, 'r, Self> {
         Split { finder: self.find_iter(text), last: 0 }
     }
 
-    pub fn replace<F>(&self, text: &str, rep: F) -> String
+    fn replace<F>(&self, text: &str, rep: F) -> String
     where
     F: Fn(usize, & Captures) -> String {
         let mut iter = self.captures_iter(text).enumerate().peekable();
@@ -164,7 +167,9 @@ impl NativeRegex {
 
 }
 
-impl<'t> Matches<'t> {
+impl<'t, 'r, R> Matches<'t, 'r, R>
+    where R: NativeRegex
+{
 
     pub fn text(&self) -> & 't str {
         self.capture_match.text
@@ -172,7 +177,8 @@ impl<'t> Matches<'t> {
 
 }
 
-impl<'t> CaptureMatches<'t> {
+impl<'t, 'r, R> CaptureMatches<'t, 'r, R>
+    where R: NativeRegex {
 
     pub fn text(&self) -> & 't str {
         self.text
@@ -180,7 +186,8 @@ impl<'t> CaptureMatches<'t> {
 
 }
 
-impl<'t> Iterator for CaptureMatches<'t> {
+impl<'t, 'r, R> Iterator for CaptureMatches<'t, 'r, R>
+    where R: NativeRegex {
 
     type Item = Captures<'t>;
 
@@ -188,7 +195,7 @@ impl<'t> Iterator for CaptureMatches<'t> {
         if self.last_end > self.text.len() {
             return None;
         }
-        let locations = match (self.regex)(self.text, self.last_end) {
+        let locations = match self.regex.regex_function(self.text, self.last_end) {
             None => return None,
             Some(m) => m
         };
@@ -219,7 +226,8 @@ impl<'t> Iterator for CaptureMatches<'t> {
 }
 
 
-impl<'t> Iterator for Matches<'t> {
+impl<'t, 'r, R> Iterator for Matches<'t, 'r, R>
+    where R: NativeRegex {
 
     type Item = Match<'t>;
 
@@ -234,7 +242,8 @@ impl<'t> Iterator for Matches<'t> {
 
 }
 
-impl<'t> Iterator for Split<'t> {
+impl<'t, 'r, R> Iterator for Split<'t, 'r, R>
+    where R: NativeRegex {
 
     type Item = & 't str;
 

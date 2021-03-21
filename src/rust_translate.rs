@@ -212,7 +212,7 @@ fn translate_ast(ast: & NativeRegexAST, capture_index: & mut usize, inforloop: b
     Ok((word_boundary, code))
 }
 
-pub fn translate(regex: & str, function_name: & str) -> Result<String, String> {
+pub fn translate(regex: & str, struct_name: & str) -> Result<String, String> {
 
     //Add the base code, including capture array/vector and custom function name
 
@@ -228,40 +228,68 @@ pub fn translate(regex: & str, function_name: & str) -> Result<String, String> {
 
                     let (count, table) = ast.get_captures(1);
 
-                    println!("Table: {:?}", table);
+                    let mut hashmap_init_code = String::new();
 
-                    Ok(format!("// Hard coded function to match regex '{}'
+                    for (name, index) in table.iter() {
+                        hashmap_init_code.push_str(&format!("\t\tname_map.insert(\"{}\", {});\n", name, index))
+                    }
+
+                    Ok(format!("
+pub struct {};
+
+impl {} {{
+    pub fn new() -> Self {{
+        {}
+    }}
+}}
+
+impl native_regex_lib::native_regex::NativeRegex for {} {{
+
+    // Function to match regex '{}'
     #[allow(unused_parens)]
-pub fn {}(str_text: &str, start: usize) -> Option<Vec<Option<(usize, usize)>>> {{
+    fn regex_function(&self, str_text: &str, start: usize) -> Option<Vec<Option<(usize, usize)>>> {{
 
 
-    let text = str_text.as_bytes();
+        let text = str_text.as_bytes();
 
-    let mut index = start;
+        let mut index = start;
 
-    let mut captures = vec![None; {}];
-
-    {}
-
-    'main: while index < text.len() {{
-
-        //Start counter
-        let mut counter = 0;
-
-        let capture_0_start = index + counter;
+        let mut captures = vec![None; {}];
 
         {}
 
-        captures[0] = Some((capture_0_start, index+counter));
+        'main: while index < text.len() {{
 
-        return Some(captures);
+            //Start counter
+            let mut counter = 0;
+
+            let capture_0_start = index + counter;
+
+            {}
+
+            captures[0] = Some((capture_0_start, index+counter));
+
+            return Some(captures);
+        }}
+
+
+        None
     }}
 
 
-    None
-}}", regex, function_name, count,
-if word_boundary { "let word_class = |ch: u8| { ch >= 48 && ch <= 57 || ch >= 65 && ch <= 90 || ch == 95 || ch >= 97 && ch <= 122 };"
-} else {""}, tree_code))
+    fn capture_names(&self) -> std::collections::HashMap<& 'static str, usize> {{
+        let {}name_map = std::collections::HashMap::new();
+
+        {}
+
+        name_map
+    }}
+
+
+}}
+", struct_name, struct_name, struct_name, struct_name, regex, count,
+                               if word_boundary { "let word_class = |ch: u8| { ch >= 48 && ch <= 57 || ch >= 65 && ch <= 90 || ch == 95 || ch >= 97 && ch <= 122 };"
+} else {""}, tree_code, if table.is_empty() {""} else {"mut "}, hashmap_init_code))
 
 
                 }

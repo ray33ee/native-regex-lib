@@ -16,13 +16,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Character class subtraction and intersection
   - Lookahead and look behind 
     - Implement the inner regexes as separate regex engines?
-- Convert NativeRegex into a trait with two required functions
-  - fn _match(& str, usize) -> Option<...>
-  - fn _hash() -> HashMap<String, usize>
-  And all the functions currently in NativeRegex become provided methods
 
 ### Unfinished Ideas
 - Try to identify regexes that use backtracking, and warn user that backtracking is not supported 
+
+## [0.2.4] - 2021-03-20
+
+### Added
+- Converted NativeRegex into a trait with two required functions
+  - fn _match(& str, usize) -> Option<...>
+  - fn _hash() -> HashMap<String, usize>
+    And all the functions currently in NativeRegex become provided methods
+- Finished code for named captures    
 
 ## [0.2.3] - 2021-03-18
 
