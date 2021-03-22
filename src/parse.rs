@@ -31,12 +31,6 @@ pub enum AnchorType {
     WordBorder, // \b
 }
 
-/*#[derive(Debug)]
-pub struct CharacterSet {
-    pub inverted: bool,
-    pub set: Vec<(bool, RangeInclusive<u8>)>
-}*/
-
 #[derive(Debug)]
 pub enum Token {
     CharacterClass(CharacterSet, RepeaterType), //Can be a traditional character class, [] or a shorthand character class
@@ -316,7 +310,7 @@ impl NativeRegexAST {
         let mut tabs = String::new();
 
         for _ in 0..level {
-            tabs = format!("{}\t", tabs);
+            tabs.push_str("\t");
         }
 
         for token in self.tokens.iter() {

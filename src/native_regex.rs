@@ -86,9 +86,32 @@ impl<'t> From<Match<'t>> for Range<usize> {
 
 pub trait NativeRegex: Sized {
 
-    fn regex_function(&self, text: & str, start: usize) -> NativeRegexReturn;
+    fn step(&self, captures: & mut Vec<Option<(usize, usize)>>, text: & [u8], index: usize) -> Option<()>;
 
     fn capture_names(&self) -> HashMap<& 'static str, usize>;
+
+    fn word_class(&self, ch: u8) -> bool {
+        ch >= 48 && ch <= 57 || ch >= 65 && ch <= 90 || ch == 95 || ch >= 97 && ch <= 122
+    }
+
+    fn regex_function(&self, str_text: &str, start: usize) -> NativeRegexReturn {
+
+        let text = str_text.as_bytes();
+
+        let mut index = start;
+
+        let mut captures = Vec::new();
+
+        while index < text.len() {
+            match self.step(& mut captures, text, index) {
+                Some(_) => {return Some(captures);}
+                None => {captures.clear(); index += 1;}
+            }
+        }
+
+
+        None
+    }
 
     fn is_match(&self, text: &str) -> bool {
         self.regex_function(text, 0).is_some()

@@ -1,7 +1,7 @@
 use crate::parse::*;
 
 fn bounds_check(n: usize) -> String {
-    format!("if index + counter + ({} - 1) > text.len() {{ index += 1; continue 'main; }}", n)
+    format!("if index + offset + ({} - 1) > text.len() {{ return None; }}", n)
 }
 
 fn envelope(inner_code: String, repeater: &RepeaterType, nomatch: & str) -> String {
@@ -14,7 +14,7 @@ fn envelope(inner_code: String, repeater: &RepeaterType, nomatch: & str) -> Stri
         format!("{{
     let mut match_count = 0;
 
-    for _ in &text[index + counter..] {{
+    for _ in &text[index + offset..] {{
         {}
 
         match_count += 1;
@@ -30,7 +30,7 @@ fn envelope(inner_code: String, repeater: &RepeaterType, nomatch: & str) -> Stri
             format!("{{
     let mut found = false;
 
-    for _ in &text[index + counter..] {{
+    for _ in &text[index + offset..] {{
         {}
         found = true;
     }}
@@ -41,7 +41,7 @@ fn envelope(inner_code: String, repeater: &RepeaterType, nomatch: & str) -> Stri
 }}\n\n", inner_code, nomatch)
         },
         RepeaterType::ZeroAndAbove => {
-            format!("for _ in &text[index + counter..] {{
+            format!("for _ in &text[index + offset..] {{
     {}
 }}\n\n", inner_code)
         },
@@ -49,7 +49,7 @@ fn envelope(inner_code: String, repeater: &RepeaterType, nomatch: & str) -> Stri
             format!("{{
     let mut match_count = 0;
 
-    for _ in &text[index + counter..] {{
+    for _ in &text[index + offset..] {{
         {}
 
         match_count += 1;
@@ -68,7 +68,7 @@ fn envelope(inner_code: String, repeater: &RepeaterType, nomatch: & str) -> Stri
             format!("{{
     let mut match_count = 0;
 
-    for _ in &text[index + counter..] {{
+    for _ in &text[index + offset..] {{
         {}
 
         match_count += 1;
@@ -87,7 +87,7 @@ fn envelope(inner_code: String, repeater: &RepeaterType, nomatch: & str) -> Stri
             format!("{{
     let mut match_count = 0;
 
-    for _ in &text[index + counter..] {{
+    for _ in &text[index + offset..] {{
         {}
 
         match_count += 1;
@@ -102,7 +102,7 @@ fn envelope(inner_code: String, repeater: &RepeaterType, nomatch: & str) -> Stri
 }
 
 fn get_no_match(inforloop: bool) -> & 'static str {
-    if inforloop { "break;" } else { "index += 1; continue;" }
+    if inforloop { "break;" } else { "return None;" }
 }
 
 fn token_translate(token: & Token, capture_index: & mut usize, inforloop: bool) -> Result<(bool, String), String> {
@@ -114,33 +114,33 @@ fn token_translate(token: & Token, capture_index: & mut usize, inforloop: bool) 
             let outernomatch = get_no_match(inforloop);
 
             let withinnomatch = get_no_match(*repeater != RepeaterType::ExactlyOnce || inforloop);
-            Ok((false, envelope(format!("{}\n\nif text[index + counter] != {} {{ {} }}\n\ncounter += 1;\n\n", bounds_check(1), *character, withinnomatch), repeater, outernomatch)))
+            Ok((false, envelope(format!("{}\n\nif text[index + offset] != {} {{ {} }}\n\noffset += 1;\n\n", bounds_check(1), *character, withinnomatch), repeater, outernomatch)))
         },
         Token::LiteralList(list) => {
-            let mut conditions = format!("text[index + counter] == {}", list[0]);
+            let mut conditions = format!("text[index + offset] == {}", list[0]);
             for i in 1..list.len() {
-                conditions = format!("{} && text[index + counter + {}] == {}", conditions, i, list[i])
+                conditions = format!("{} && text[index + offset + {}] == {}", conditions, i, list[i])
             }
-            Ok((false, format!("{}\n\nif !({}) {{ {} }}\n\ncounter += {};\n\n", bounds_check(list.len()), conditions, nomatch, list.len())))
+            Ok((false, format!("{}\n\nif !({}) {{ {} }}\n\noffset += {};\n\n", bounds_check(list.len()), conditions, nomatch, list.len())))
         },
         Token::Anchor(anchor) => match anchor {
             AnchorType::Start => {
-                Ok((false, String::from("if index+counter != 0 { return None; }")))
+                Ok((false, String::from("if index+offset != 0 { return None; }")))
             },
             AnchorType::End => {
-                Ok((false, String::from("if index+counter != text.len() { index += 1; continue; }")))
+                Ok((false, String::from("if index+offset != text.len() { return None; }")))
             },
             AnchorType::WordBorder => {
                 //Err(String::from("Word borders are not supported. Please see readme for more information."))
-                Ok((true, format!("if index+counter != 0 && index+counter != str_text.len() {{
-    if (word_class(text[index+counter-1]) || !word_class(text[index+counter])) &&
-        (!word_class(text[index+counter-1]) || word_class(text[index+counter])) {{
+                Ok((true, format!("if index+offset != 0 && index+offset != text.len() {{
+    if (self.word_class(text[index+offset-1]) || !self.word_class(text[index+offset])) &&
+        (!self.word_class(text[index+offset-1]) || self.word_class(text[index+offset])) {{
 
         {}
     }}
 }} else {{
 
-    if index+counter == 0 && !word_class(text[0]) || index+counter == str_text.len() - 1 && !word_class(text[str_text.len() - 1]) {{
+    if index+offset == 0 && !self.word_class(text[0]) || index+offset == text.len() - 1 && !self.word_class(text[text.len() - 1]) {{
 
         {}
     }}
@@ -155,7 +155,7 @@ fn token_translate(token: & Token, capture_index: & mut usize, inforloop: bool) 
 
             let withinnomatch = get_no_match(*repeater != RepeaterType::ExactlyOnce || inforloop);
 
-            Ok((false, envelope(format!("{}\n\nif {} {{ {} }}\n\ncounter += 1;\n\n", bounds_check(1), set.code("text[index+counter]"), withinnomatch), repeater, outernomatch)))
+            Ok((false, envelope(format!("{}\n\nif {} {{ {} }}\n\noffset += 1;\n\n", bounds_check(1), set.code("text[index+offset]"), withinnomatch), repeater, outernomatch)))
         },
         Token::Group(ast, repeater, group, _name) => {
 
@@ -165,8 +165,8 @@ fn token_translate(token: & Token, capture_index: & mut usize, inforloop: bool) 
 
             let (word_boundary, code)  = match group {
                 GroupType::Capturing => {
-                    let capture_start = format!("let capture_{}_start = index+counter;\n\n", *capture_index);
-                    let capture_end = format!("captures[{}] = Some((capture_{}_start, index + counter));\n\n", *capture_index, *capture_index);
+                    let capture_start = format!("let capture_{}_start = index+offset;\n\n", *capture_index);
+                    let capture_end = format!("captures.push(Some((capture_{}_start, index + offset)));\n\n", *capture_index);
 
                     *capture_index += 1;
 
@@ -199,7 +199,8 @@ fn translate_ast(ast: & NativeRegexAST, capture_index: & mut usize, inforloop: b
 
         match token_translate(token, capture_index, inforloop) {
             Ok((wb, token_code)) => {
-                code = format!("{}{}", code, token_code);
+                //code = format!("{}{}", code, token_code);
+                code.push_str(&token_code);
                 word_boundary |= wb;
             }
             Err(e) => {
@@ -224,9 +225,9 @@ pub fn translate(regex: & str, struct_name: & str) -> Result<String, String> {
             let ast = crate::parse::NativeRegexAST::from(regex.as_bytes());
 
             match translate_ast(&ast, & mut capture_index, false) {
-                Ok((word_boundary, tree_code)) => {
+                Ok((_word_boundary, tree_code)) => {
 
-                    let (count, table) = ast.get_captures(1);
+                    let (_, table) = ast.get_captures(1);
 
                     let mut hashmap_init_code = String::new();
 
@@ -247,35 +248,18 @@ impl native_regex_lib::native_regex::NativeRegex for {} {{
 
     // Function to match regex '{}'
     #[allow(unused_parens)]
-    fn regex_function(&self, str_text: &str, start: usize) -> Option<Vec<Option<(usize, usize)>>> {{
+    fn step(&self, captures: & mut Vec<Option<(usize, usize)>>, text: & [u8], index: usize) -> Option<()> {{
 
+        let mut offset = 0;
 
-        let text = str_text.as_bytes();
-
-        let mut index = start;
-
-        let mut captures = vec![None; {}];
+        let capture_0_start = index+offset;
 
         {}
 
-        'main: while index < text.len() {{
+        captures.insert(0, Some((capture_0_start, index+offset)));
 
-            //Start counter
-            let mut counter = 0;
-
-            let capture_0_start = index + counter;
-
-            {}
-
-            captures[0] = Some((capture_0_start, index+counter));
-
-            return Some(captures);
-        }}
-
-
-        None
+        return Some(());
     }}
-
 
     fn capture_names(&self) -> std::collections::HashMap<& 'static str, usize> {{
         let {}name_map = std::collections::HashMap::new();
@@ -287,9 +271,7 @@ impl native_regex_lib::native_regex::NativeRegex for {} {{
 
 
 }}
-", struct_name, struct_name, struct_name, struct_name, regex, count,
-                               if word_boundary { "let word_class = |ch: u8| { ch >= 48 && ch <= 57 || ch >= 65 && ch <= 90 || ch == 95 || ch >= 97 && ch <= 122 };"
-} else {""}, tree_code, if table.is_empty() {""} else {"mut "}, hashmap_init_code))
+", struct_name, struct_name, struct_name, struct_name, regex, tree_code, if table.is_empty() {""} else {"mut "}, hashmap_init_code))
 
 
                 }

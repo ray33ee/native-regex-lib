@@ -20,6 +20,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Unfinished Ideas
 - Try to identify regexes that use backtracking, and warn user that backtracking is not supported 
 
+## [0.2.5] - 2021-03-21
+
+### Added
+- `step` function to NativeRegex trait that allows user to step through text one character at a time, to pave the way for RegexSet.
+- Renamed `counter` to `offset` in output code
+- We no longer preallocate the captures vector to allow `regex_function` to become a provided method
+
 ## [0.2.4] - 2021-03-20
 
 ### Added
