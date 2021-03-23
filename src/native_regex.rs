@@ -1,12 +1,13 @@
 
 use std::fmt::Debug;
 use std::ops::Range;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use std::vec::IntoIter;
+use std::slice::Iter;
 
 type NativeRegexLocations = Vec<Option<(usize, usize)>>;
-type NativeRegexReturn<'a> = Option<NativeRegexLocations>;
+pub type NativeRegexReturn<'a> = Option<NativeRegexLocations>;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Match<'t> {
@@ -18,15 +19,13 @@ pub struct Match<'t> {
 
 #[derive(Copy, Clone)]
 pub struct Matches<'t, 'r, R>
-    where R: NativeRegex
-{
+where R: NativeRegex {
     capture_match: CaptureMatches<'t, 'r, R>
 }
 
 #[derive(Copy, Clone)]
 pub struct CaptureMatches<'t, 'r, R>
-where R: NativeRegex
-{
+where R: NativeRegex {
     regex: & 'r R,
     text: & 't str,
     last_end: usize,
@@ -42,10 +41,117 @@ pub struct Captures<'t> {
 
 #[derive(Copy, Clone)]
 pub struct Split<'t, 'r, R>
-    where R: NativeRegex
-{
+    where R: NativeRegex {
     finder: Matches<'t, 'r, R>,
     last: usize
+}
+
+#[derive(Clone)]
+pub struct Engine {
+    regex: fn (captures: & mut Vec<Option<(usize, usize)>>, text: & [u8], index: usize) -> Option<()>,
+    named_groups: HashMap<& 'static str, usize>
+}
+
+pub struct NativeRegexSet {
+    engines: Vec<Engine>
+}
+
+#[derive(Debug)]
+pub struct SetMatches {
+    matches: Vec<(usize, usize)>
+}
+
+pub struct SetMatchesIterator<'a> {
+    it: Iter<'a, (usize, usize)>
+}
+
+impl<'a> Iterator for SetMatchesIterator<'a> {
+    type Item = & 'a (usize, usize);
+
+    fn next(& mut self) -> Option<Self::Item> {
+        self.it.next()
+    }
+
+}
+
+impl SetMatches {
+    fn new() -> Self {
+        SetMatches {
+            matches: Vec::new()
+        }
+    }
+
+    pub fn iter(&self) -> SetMatchesIterator {
+        SetMatchesIterator {
+            it: self.matches.iter()
+        }
+    }
+}
+
+
+
+impl NativeRegexSet {
+
+    pub fn new<I>(regexes: I) -> Self
+    where I: IntoIterator<Item = Engine> {
+
+        let engines = regexes.into_iter().collect();
+
+        NativeRegexSet {
+            engines
+        }
+    }
+
+    pub fn is_match(&self, text: & str) -> bool {
+
+        let text = text.as_bytes();
+
+        let mut captures = Vec::new();
+
+        for (ind, _) in text.iter().enumerate() {
+
+            for engine in self.engines.iter() {
+                if (engine.regex)(& mut captures, text, ind).is_some() {
+                    return true;
+                }
+            }
+
+        }
+
+        false
+    }
+
+    pub fn matches(&self, text: & str) -> SetMatches {
+
+        let text = text.as_bytes();
+
+        //List of engines that have not yet matched
+        let mut set_matches = SetMatches::new();
+
+        let mut finished_set = HashSet::new();
+
+        let mut captures = Vec::new();
+
+        for (text_index, _) in text.iter().enumerate() {
+
+            if finished_set.len() == self.engines.len() {
+                break;
+            }
+
+            for (engine_index, engine) in self.engines.iter().enumerate() {
+                if !finished_set.contains(&engine_index) {
+                    if (engine.regex)(& mut captures, text, text_index).is_some() {
+                        finished_set.insert(engine_index); //Flag the engine for removal
+                        set_matches.matches.push((engine_index, text_index));
+                    }
+                }
+            }
+        }
+
+        set_matches
+
+    }
+
 }
 
 impl<'t> Match<'t> {
@@ -86,12 +192,19 @@ impl<'t> From<Match<'t>> for Range<usize> {
 
 pub trait NativeRegex: Sized {
 
-    fn step(&self, captures: & mut Vec<Option<(usize, usize)>>, text: & [u8], index: usize) -> Option<()>;
+    fn step(captures: & mut Vec<Option<(usize, usize)>>, text: & [u8], index: usize) -> Option<()>;
 
-    fn capture_names(&self) -> HashMap<& 'static str, usize>;
+    fn capture_names(&self) -> &HashMap<& 'static str, usize>;
 
-    fn word_class(&self, ch: u8) -> bool {
+    fn word_class(ch: u8) -> bool {
         ch >= 48 && ch <= 57 || ch >= 65 && ch <= 90 || ch == 95 || ch >= 97 && ch <= 122
+    }
+
+    fn engine(&self) -> Engine {
+        Engine {
+            regex: Self::step,
+            named_groups: self.capture_names().clone()
+        }
     }
 
     fn regex_function(&self, str_text: &str, start: usize) -> NativeRegexReturn {
@@ -103,7 +216,7 @@ pub trait NativeRegex: Sized {
         let mut captures = Vec::new();
 
         while index < text.len() {
-            match self.step(& mut captures, text, index) {
+            match Self::step(& mut captures, text, index) {
                 Some(_) => {return Some(captures);}
                 None => {captures.clear(); index += 1;}
             }
@@ -130,7 +243,7 @@ pub trait NativeRegex: Sized {
     }
 
     fn find_iter<'t, 'r>(& 'r self, text: & 't str) -> Matches<'t, 'r, Self>
-         {
+    {
         Matches {
             capture_match: self.captures_iter(text)
         }
@@ -149,8 +262,7 @@ pub trait NativeRegex: Sized {
         }
     }
 
-    fn captures_iter<'t, 'r>(& 'r self, text: & 't str) -> CaptureMatches<'t, 'r, Self>
-    {
+    fn captures_iter<'t, 'r>(& 'r self, text: & 't str) -> CaptureMatches<'t, 'r, Self> {
 
         CaptureMatches {
             regex: &self,
@@ -165,8 +277,8 @@ pub trait NativeRegex: Sized {
     }
 
     fn replace<F>(&self, text: &str, rep: F) -> String
-    where
-    F: Fn(usize, & Captures) -> String {
+    where F: Fn(usize, & Captures) -> String {
+
         let mut iter = self.captures_iter(text).enumerate().peekable();
         if iter.peek().is_none() {
             return String::from(text);
@@ -190,9 +302,10 @@ pub trait NativeRegex: Sized {
 
 }
 
+
+
 impl<'t, 'r, R> Matches<'t, 'r, R>
-    where R: NativeRegex
-{
+    where R: NativeRegex {
 
     pub fn text(&self) -> & 't str {
         self.capture_match.text

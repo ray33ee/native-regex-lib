@@ -20,6 +20,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Unfinished Ideas
 - Try to identify regexes that use backtracking, and warn user that backtracking is not supported 
 
+## [0.2.6] - 2021-03-22
+
+### Added
+- `NativeRegexSet` with similar functionality to `regex::RegexSet` 
+- `Engine` struct to expose the inner core of regexes (for use in `NativeRegexSet`)
+- `SetMatches` and `SetMatchesIterator` to convey information about which regexes match and at what position in the string
+- `word_class` function now changed to static  
+- Output struct now stores the named captures in the struct rather than calculating them on each capture_names call
+- The output struct uses references to the named captures instead of cloning them around
+- `NativeRegex::step` is now a static function so its function pointer can be easily passed to `Engine`
+- `NativeRegex::engine` function added to facilitate the creation of `NativeRegexSet`
+- Implemented `Into<Engine>` for output code to make a more idiomatic extraction of `Engine` from `NativeRegex` types
+
+### Fixed
+- Out of bounds bug fixed, bounds checks now work properly
+
 ## [0.2.5] - 2021-03-21
 
 ### Added

@@ -1,7 +1,7 @@
 use crate::parse::*;
 
 fn bounds_check(n: usize) -> String {
-    format!("if index + offset + ({} - 1) > text.len() {{ return None; }}", n)
+    format!("if index + offset + ({} - 1) >= text.len() {{ return None; }}", n)
 }
 
 fn envelope(inner_code: String, repeater: &RepeaterType, nomatch: & str) -> String {
@@ -133,14 +133,14 @@ fn token_translate(token: & Token, capture_index: & mut usize, inforloop: bool) 
             AnchorType::WordBorder => {
                 //Err(String::from("Word borders are not supported. Please see readme for more information."))
                 Ok((true, format!("if index+offset != 0 && index+offset != text.len() {{
-    if (self.word_class(text[index+offset-1]) || !self.word_class(text[index+offset])) &&
-        (!self.word_class(text[index+offset-1]) || self.word_class(text[index+offset])) {{
+    if (Self::word_class(text[index+offset-1]) || !Self::word_class(text[index+offset])) &&
+        (!Self::word_class(text[index+offset-1]) || Self::word_class(text[index+offset])) {{
 
         {}
     }}
 }} else {{
 
-    if index+offset == 0 && !self.word_class(text[0]) || index+offset == text.len() - 1 && !self.word_class(text[text.len() - 1]) {{
+    if index+offset == 0 && !Self::word_class(text[0]) || index+offset == text.len() - 1 && !Self::word_class(text[text.len() - 1]) {{
 
         {}
     }}
@@ -232,23 +232,39 @@ pub fn translate(regex: & str, struct_name: & str) -> Result<String, String> {
                     let mut hashmap_init_code = String::new();
 
                     for (name, index) in table.iter() {
-                        hashmap_init_code.push_str(&format!("\t\tname_map.insert(\"{}\", {});\n", name, index))
+                        hashmap_init_code.push_str(&format!("\t\tnamed_groups.insert(\"{}\", {});\n", name, index))
                     }
 
                     Ok(format!("
-pub struct {};
+pub struct {} {{
+    named_groups: std::collections::HashMap<& 'static str, usize>
+}}
 
 impl {} {{
     pub fn new() -> Self {{
+        let {}named_groups = std::collections::HashMap::new();
+
         {}
+
+        {} {{
+            named_groups
+        }}
     }}
+}}
+
+impl Into<native_regex_lib::native_regex::Engine> for {} {{
+
+    fn into(self) -> native_regex_lib::native_regex::Engine {{
+        self.engine()
+    }}
+
 }}
 
 impl native_regex_lib::native_regex::NativeRegex for {} {{
 
     // Function to match regex '{}'
     #[allow(unused_parens)]
-    fn step(&self, captures: & mut Vec<Option<(usize, usize)>>, text: & [u8], index: usize) -> Option<()> {{
+    fn step(captures: & mut Vec<Option<(usize, usize)>>, text: & [u8], index: usize) -> Option<()> {{
 
         let mut offset = 0;
 
@@ -261,17 +277,13 @@ impl native_regex_lib::native_regex::NativeRegex for {} {{
         return Some(());
     }}
 
-    fn capture_names(&self) -> std::collections::HashMap<& 'static str, usize> {{
-        let {}name_map = std::collections::HashMap::new();
-
-        {}
-
-        name_map
+    fn capture_names(&self) -> &std::collections::HashMap<& 'static str, usize> {{
+        &self.named_groups
     }}
 
 
 }}
-", struct_name, struct_name, struct_name, struct_name, regex, tree_code, if table.is_empty() {""} else {"mut "}, hashmap_init_code))
+", struct_name, struct_name, if table.is_empty() {""} else {"mut "}, hashmap_init_code, struct_name, struct_name, struct_name, regex, tree_code))
 
 
                 }
