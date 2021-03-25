@@ -6,6 +6,8 @@ use std::collections::{HashMap, HashSet};
 use std::vec::IntoIter;
 use std::slice::Iter;
 
+use std::str::{Chars, CharIndices};
+
 type NativeRegexLocations = Vec<Option<(usize, usize)>>;
 pub type NativeRegexReturn<'a> = Option<NativeRegexLocations>;
 
@@ -48,7 +50,7 @@ pub struct Split<'t, 'r, R>
 
 #[derive(Clone)]
 pub struct Engine {
-    regex: fn (captures: & mut Vec<Option<(usize, usize)>>, text: & [u8], index: usize) -> Option<()>,
+    regex: fn (chars: CharIndices, offset: usize, length: usize) -> Option<Vec<Option<(usize, usize)>>>,
     named_groups: HashMap<& 'static str, usize>
 }
 
@@ -57,16 +59,16 @@ pub struct NativeRegexSet {
 }
 
 #[derive(Debug)]
-pub struct SetMatches {
-    matches: Vec<(usize, usize)>
+pub struct SetMatches<'t> {
+    matches: Vec<(usize, Captures<'t>)>
 }
 
-pub struct SetMatchesIterator<'a> {
-    it: Iter<'a, (usize, usize)>
+pub struct SetMatchesIterator<'a, 't> {
+    it: Iter<'a, (usize, Captures<'t>)>
 }
 
-impl<'a> Iterator for SetMatchesIterator<'a> {
-    type Item = & 'a (usize, usize);
+impl<'a,'t> Iterator for SetMatchesIterator<'a, 't> {
+    type Item = & 'a (usize, Captures<'t>);
 
     fn next(& mut self) -> Option<Self::Item> {
         self.it.next()
@@ -74,7 +76,7 @@ impl<'a> Iterator for SetMatchesIterator<'a> {
 
 }
 
-impl SetMatches {
+impl<'t> SetMatches<'t> {
     fn new() -> Self {
         SetMatches {
             matches: Vec::new()
@@ -88,7 +90,7 @@ impl SetMatches {
     }
 }
 
-
+/*
 
 impl NativeRegexSet {
 
@@ -121,7 +123,9 @@ impl NativeRegexSet {
         false
     }
 
-    pub fn matches(&self, text: & str) -> SetMatches {
+    pub fn matches<'t>(&self, text: & 't str) -> SetMatches<'t> {
+
+        let original = text;
 
         let text = text.as_bytes();
 
@@ -142,7 +146,18 @@ impl NativeRegexSet {
                 if !finished_set.contains(&engine_index) {
                     if (engine.regex)(& mut captures, text, text_index).is_some() {
                         finished_set.insert(engine_index); //Flag the engine for removal
-                        set_matches.matches.push((engine_index, text_index));
+
+                        let caps = Captures {
+                            text: original,
+                            named_groups: engine.named_groups.clone(),
+                            locations: captures.clone()
+                        };
+
+                        set_matches.matches.push((engine_index, caps));
+
+
+
+                        captures.clear();
                     }
                 }
             }
@@ -153,7 +168,7 @@ impl NativeRegexSet {
     }
 
 }
-
+*/
 impl<'t> Match<'t> {
 
     fn new(text: &'t str, start: usize, end: usize) -> Match<'t> {
@@ -192,7 +207,7 @@ impl<'t> From<Match<'t>> for Range<usize> {
 
 pub trait NativeRegex: Sized {
 
-    fn step(captures: & mut Vec<Option<(usize, usize)>>, text: & [u8], index: usize) -> Option<()>;
+    fn step(chars: CharIndices, offset: usize, length: usize) -> Option<Vec<Option<(usize, usize)>>>;
 
     fn capture_names(&self) -> &HashMap<& 'static str, usize>;
 
@@ -209,21 +224,29 @@ pub trait NativeRegex: Sized {
 
     fn regex_function(&self, str_text: &str, start: usize) -> NativeRegexReturn {
 
-        let text = str_text.as_bytes();
+        let bytes = str_text.as_bytes();
 
-        let mut index = start;
+        unsafe {
+            let mut chars = std::str::from_utf8_unchecked(&bytes[start..]).char_indices();
 
-        let mut captures = Vec::new();
+            let mut ch: Option<(usize, char)> = None;
 
-        while index < text.len() {
-            match Self::step(& mut captures, text, index) {
-                Some(_) => {return Some(captures);}
-                None => {captures.clear(); index += 1;}
+            loop {
+                match Self::step(chars.as_str().char_indices(), if ch.is_none() { 0 } else { ch.unwrap().0 + 1 } + start, str_text.len()) {
+                    Some(op) => {
+                        return Some(op);
+                    }
+                    None => {}
+                }
+
+                ch = chars.next();
+
+                if ch.is_none() {
+                    break;
+                }
             }
+            None
         }
-
-
-        None
     }
 
     fn is_match(&self, text: &str) -> bool {
@@ -415,6 +438,11 @@ impl<'t> Captures<'t> {
             }
             None => None
         }
+    }
+
+    pub fn first(&self) -> Match<'t> {
+        let (start, end) = self.locations.get(0).unwrap().unwrap();
+        Match::new(self.text, start, end)
     }
 
     pub fn name(&self, name: &str) -> Option<Match<'t>> {

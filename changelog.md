@@ -5,25 +5,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### To Do
-- Regex sets
-  - A set of `n` regexes should only loop through the text string one time, not `n` times.
 - Add a validator to `translate` function for the function name to ensure that the name complies with the Rust naming system
-- Support backreferences & relative backreferences
-- Add a support for regex::Replacer-like trait
-- Add negated word boundary, \B
+- Add a support for `regex::Replacer`-like trait
 - Create a web app (via WebAssembly) to convert regexes to source
-- Possible additions
-  - Character class subtraction and intersection
-  - Lookahead and look behind 
-    - Implement the inner regexes as separate regex engines?
+- Add examples
+- Add support for
+  - Anchors
+  - Word boundaries
+  - Empty regexes
+  - Named captures
+  - NativeRegexSet
+- Update process.md  
+- Turn code in rust_translate.rs into a trait
 
 ### Unfinished Ideas
-- Try to identify regexes that use backtracking, and warn user that backtracking is not supported 
+- Try to identify regexes that use backtracking, and warn user that backtracking is not supported
+- Create an IR between the HIR and the outputted source code. Using something like
+  - For
+  - If
+  - Next - command to move to next character
+  - Declare - command to declare a variable and initialise it
+  - Insert - command to add to capture group
+  
+## [0.3.0] - 2021-03-23
+
+### Changed
+- Complete overhauls of rust_translate.rs to use regex-syntax crate
+- Using the HIR class to parse regex
+- Supporting unicode characters
+- Using iterators to iterate over unicode characters
+
+
+### Added
+- `SetMatches` now returns the index of the matched regex and the `Captures` object representing all the capture groups
 
 ## [0.2.6] - 2021-03-22
 
 ### Added
-- `NativeRegexSet` with similar functionality to `regex::RegexSet` 
+- `NativeRegexSet` with similar functionality to `regex::RegexSet`. Like `regex::RegexSet`, n regexes will only iterate over the text once
 - `Engine` struct to expose the inner core of regexes (for use in `NativeRegexSet`)
 - `SetMatches` and `SetMatchesIterator` to convey information about which regexes match and at what position in the string
 - `word_class` function now changed to static  
