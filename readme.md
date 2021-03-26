@@ -13,7 +13,7 @@ This project aims to alleviate these issues by treating a Regex as source code i
 This is possible since the vast majority of Regexes are known at compile time.
 This has the following benefits
 
-- Bad regexes are spotted at compile time
+- Bad regexes are spotted at compile time 
 - No runtime overhead for compiling Regexes
 - Faster regex matching and performance
 

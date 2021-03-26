@@ -1,4 +1,9 @@
 
+# Outdated
+
+This is the original process.md file before HIR and Unicode. Much has changed since this document was created,
+and it has been preserved for interest reasons only.
+
 # Issue
 
 The following outline does not support backtracking. This will not be supported for performance reasons.

@@ -6,7 +6,8 @@ use std::collections::{HashMap, HashSet};
 use std::vec::IntoIter;
 use std::slice::Iter;
 
-use std::str::{Chars, CharIndices};
+use std::str::{CharIndices};
+use crate::native_regex::Previous::{Start, Character};
 
 type NativeRegexLocations = Vec<Option<(usize, usize)>>;
 pub type NativeRegexReturn<'a> = Option<NativeRegexLocations>;
@@ -50,7 +51,7 @@ pub struct Split<'t, 'r, R>
 
 #[derive(Clone)]
 pub struct Engine {
-    regex: fn (chars: CharIndices, offset: usize, length: usize) -> Option<Vec<Option<(usize, usize)>>>,
+    regex: fn (chars: CharOffsetIndices, length: usize) -> Option<Vec<Option<(usize, usize)>>>,
     named_groups: HashMap<& 'static str, usize>
 }
 
@@ -65,6 +66,123 @@ pub struct SetMatches<'t> {
 
 pub struct SetMatchesIterator<'a, 't> {
     it: Iter<'a, (usize, Captures<'t>)>
+}
+
+#[derive(Clone)]
+pub struct CharOffsetIndices<'t> {
+    iter: CharIndices<'t>,
+    prev: Previous,
+    offset: usize,
+
+}
+
+pub struct CharIterIterIndex<'t> {
+    text: & 't [u8],
+    iter: CharIndices<'t>,
+    prev: Previous,
+    start: usize
+}
+
+#[derive(Clone, Debug, Copy, PartialEq)]
+pub enum Previous {
+    //The first character of a string has no previous, so we label it Start
+    Start,
+
+    //Enum to contain the previous character
+    Character(char)
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct CharacterInfo {
+    index: usize,
+    current: char,
+    previous: Previous
+}
+
+impl CharacterInfo {
+    fn new(index: usize, current: char, previous: Previous) -> Self {
+        CharacterInfo {
+            index,
+            current,
+            previous
+        }
+    }
+
+    pub fn index(&self) -> usize { self.index }
+
+    pub fn current(&self) -> char { self.current }
+
+    pub fn previous(&self) -> Previous { self.previous }
+}
+
+impl<'t> Iterator for CharOffsetIndices<'t> {
+
+    type Item = CharacterInfo;
+
+    fn next(& mut self) -> Option<Self::Item> {
+
+        let prev = self.prev.clone();
+
+        let (index, character) = self.iter.next()?;
+
+        self.prev = Character(character);
+
+        Some(CharacterInfo::new(index + self.offset, character, prev))
+    }
+
+}
+
+impl<'t> CharIterIterIndex<'t> {
+
+    pub fn new(text: & 't str, start: usize) -> Self {
+
+        let bytes = text.as_bytes();
+
+        let prev = {
+            let mut previous = Start;
+
+            for (ind, ch) in text.char_indices() {
+                if ind == start {
+                    break;
+                }
+                previous = Character(ch);
+            }
+            previous
+        };
+
+
+        unsafe {
+            CharIterIterIndex {
+                text: bytes,
+                iter: std::str::from_utf8_unchecked(&bytes[start..]).char_indices(),
+                prev,
+                start
+            }
+        }
+    }
+
+}
+
+impl<'t> Iterator for CharIterIterIndex<'t> {
+    type Item = CharOffsetIndices<'t>;
+
+    fn next(& mut self) -> Option<Self::Item> {
+
+        let prev = self.prev.clone();
+
+        let (ind, ch) = self.iter.next()?;
+
+        self.prev = Character(ch);
+
+        unsafe {
+            Some(CharOffsetIndices {
+                iter: std::str::from_utf8_unchecked(&self.text[ind + self.start..]).char_indices(),
+                prev,
+                offset: ind + self.start,
+            })
+        }
+    }
+
 }
 
 impl<'a,'t> Iterator for SetMatchesIterator<'a, 't> {
@@ -90,8 +208,6 @@ impl<'t> SetMatches<'t> {
     }
 }
 
-/*
-
 impl NativeRegexSet {
 
     pub fn new<I>(regexes: I) -> Self
@@ -106,37 +222,24 @@ impl NativeRegexSet {
 
     pub fn is_match(&self, text: & str) -> bool {
 
-        let text = text.as_bytes();
-
-        let mut captures = Vec::new();
-
-        for (ind, _) in text.iter().enumerate() {
-
-            for engine in self.engines.iter() {
-                if (engine.regex)(& mut captures, text, ind).is_some() {
-                    return true;
+            for it in CharIterIterIndex::new(text, 0) {
+                for engine in self.engines.iter() {
+                    if (engine.regex)(it.clone(), text.len()).is_some() {
+                        return true;
+                    }
                 }
             }
-
-        }
-
         false
     }
 
     pub fn matches<'t>(&self, text: & 't str) -> SetMatches<'t> {
-
-        let original = text;
-
-        let text = text.as_bytes();
 
         //List of engines that have not yet matched
         let mut set_matches = SetMatches::new();
 
         let mut finished_set = HashSet::new();
 
-        let mut captures = Vec::new();
-
-        for (text_index, _) in text.iter().enumerate() {
+        for it in CharIterIterIndex::new(text, 0) {
 
             if finished_set.len() == self.engines.len() {
                 break;
@@ -144,31 +247,30 @@ impl NativeRegexSet {
 
             for (engine_index, engine) in self.engines.iter().enumerate() {
                 if !finished_set.contains(&engine_index) {
-                    if (engine.regex)(& mut captures, text, text_index).is_some() {
-                        finished_set.insert(engine_index); //Flag the engine for removal
 
-                        let caps = Captures {
-                            text: original,
-                            named_groups: engine.named_groups.clone(),
-                            locations: captures.clone()
-                        };
+                    match (engine.regex)(it.clone(), text.len()) {
+                        Some(v) => {
+                            finished_set.insert(engine_index); //Flag the engine for removal
 
-                        set_matches.matches.push((engine_index, caps));
+                            let caps = Captures {
+                                text,
+                                named_groups: engine.named_groups.clone(),
+                                locations: v.clone()
+                            };
 
+                            set_matches.matches.push((engine_index, caps));
 
-
-                        captures.clear();
+                        }
+                        None => {}
                     }
                 }
             }
         }
 
         set_matches
-
     }
-
 }
-*/
+
 impl<'t> Match<'t> {
 
     fn new(text: &'t str, start: usize, end: usize) -> Match<'t> {
@@ -207,7 +309,7 @@ impl<'t> From<Match<'t>> for Range<usize> {
 
 pub trait NativeRegex: Sized {
 
-    fn step(chars: CharIndices, offset: usize, length: usize) -> Option<Vec<Option<(usize, usize)>>>;
+    fn step(chars: CharOffsetIndices, length: usize) -> Option<Vec<Option<(usize, usize)>>>;
 
     fn capture_names(&self) -> &HashMap<& 'static str, usize>;
 
@@ -224,29 +326,15 @@ pub trait NativeRegex: Sized {
 
     fn regex_function(&self, str_text: &str, start: usize) -> NativeRegexReturn {
 
-        let bytes = str_text.as_bytes();
-
-        unsafe {
-            let mut chars = std::str::from_utf8_unchecked(&bytes[start..]).char_indices();
-
-            let mut ch: Option<(usize, char)> = None;
-
-            loop {
-                match Self::step(chars.as_str().char_indices(), if ch.is_none() { 0 } else { ch.unwrap().0 + 1 } + start, str_text.len()) {
-                    Some(op) => {
-                        return Some(op);
-                    }
-                    None => {}
+        for it in CharIterIterIndex::new(str_text, start) {
+            match Self::step(it, str_text.len()) {
+                Some(op) => {
+                    return Some(op);
                 }
-
-                ch = chars.next();
-
-                if ch.is_none() {
-                    break;
-                }
+                None => {}
             }
-            None
         }
+        None
     }
 
     fn is_match(&self, text: &str) -> bool {
@@ -307,7 +395,6 @@ pub trait NativeRegex: Sized {
             return String::from(text);
         }
 
-
         let mut new = String::with_capacity(text.len());
         let mut last_match = 0;
 
@@ -324,8 +411,6 @@ pub trait NativeRegex: Sized {
     }
 
 }
-
-
 
 impl<'t, 'r, R> Matches<'t, 'r, R>
     where R: NativeRegex {

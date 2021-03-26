@@ -5,7 +5,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### To Do
-- Add a validator to `translate` function for the function name to ensure that the name complies with the Rust naming system
 - Add a support for `regex::Replacer`-like trait
 - Create a web app (via WebAssembly) to convert regexes to source
 - Add examples
@@ -13,10 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Anchors
   - Word boundaries
   - Empty regexes
-  - Named captures
-  - NativeRegexSet
-- Update process.md  
-- Turn code in rust_translate.rs into a trait
+- Add validator to rust compiler 
+- Use `is` functions from `regex-syntax` crate
 
 ### Unfinished Ideas
 - Try to identify regexes that use backtracking, and warn user that backtracking is not supported
@@ -26,7 +23,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Next - command to move to next character
   - Declare - command to declare a variable and initialise it
   - Insert - command to add to capture group
-  
+
+## [0.3.1] - 2021-03-25
+
+### Added
+- `CharOffsetIndices` An iterator similar to `CharIndices` that adds an offset to the output
+- `CharIterIterIndex` an iterator over a string that creates `CharOffsetIndices`
+- `NativeRegexSet` now works with new system
+- Compiler trait which attempts to facilitate the creation of other compilers
+- `RustCompiler` which implements `Compiler`
+- `name_identifier_validator` function to `Compiler` to allow users to make sure that function names are valid for their language
+- `CharOffsetIndices` now gives the previous character, if there is one  
+- `CharacterInfo` struct to contain information about the current character including
+  - Index
+  - Current character
+  - Previous character
+
 ## [0.3.0] - 2021-03-23
 
 ### Changed
@@ -34,7 +46,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Using the HIR class to parse regex
 - Supporting unicode characters
 - Using iterators to iterate over unicode characters
-
 
 ### Added
 - `SetMatches` now returns the index of the matched regex and the `Captures` object representing all the capture groups
