@@ -1,4 +1,4 @@
-
+use std::borrow::Cow;
 use std::fmt::Debug;
 use std::ops::Range;
 use std::collections::{HashMap, HashSet};
@@ -97,6 +97,60 @@ pub struct CharacterInfo {
     index: usize,
     current: char,
     previous: Previous
+}
+
+pub trait Replacer {
+
+    fn replace_append(&mut self, caps: &Captures, dst: &mut String);
+
+}
+
+impl<F, T> Replacer for F
+    where
+        F: FnMut(&Captures) -> T,
+        T: AsRef<str>,
+{
+    fn replace_append(&mut self, caps: &Captures, dst: &mut String) {
+        dst.push_str((*self)(caps).as_ref());
+    }
+}
+
+impl<'a> Replacer for &'a str {
+    fn replace_append(&mut self, caps: &Captures, dst: &mut String) {
+        caps.expand(*self, dst);
+    }
+
+}
+
+impl<'a> Replacer for &'a String {
+    fn replace_append(&mut self, caps: &Captures, dst: &mut String) {
+        self.as_str().replace_append(caps, dst)
+    }
+}
+
+impl Replacer for String {
+    fn replace_append(&mut self, caps: &Captures, dst: &mut String) {
+        self.as_str().replace_append(caps, dst)
+    }
+}
+
+impl<'a> Replacer for Cow<'a, str> {
+    fn replace_append(&mut self, caps: &Captures, dst: &mut String) {
+        self.as_ref().replace_append(caps, dst)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct NoExpand<'t>(pub &'t str);
+
+impl<'t> NoExpand<'t> {
+    pub fn new(replacement: & 't str) -> Self { NoExpand ( replacement ) }
+}
+
+impl<'t> Replacer for NoExpand<'t> {
+    fn replace_append(&mut self, _: &Captures, dst: &mut String) {
+        dst.push_str(self.0);
+    }
 }
 
 impl CharacterInfo {
@@ -313,10 +367,6 @@ pub trait NativeRegex: Sized {
 
     fn capture_names(&self) -> &HashMap<& 'static str, usize>;
 
-    fn word_class(ch: u8) -> bool {
-        ch >= 48 && ch <= 57 || ch >= 65 && ch <= 90 || ch == 95 || ch >= 97 && ch <= 122
-    }
-
     fn engine(&self) -> Engine {
         Engine {
             regex: Self::step,
@@ -387,8 +437,8 @@ pub trait NativeRegex: Sized {
         Split { finder: self.find_iter(text), last: 0 }
     }
 
-    fn replace<F>(&self, text: &str, rep: F) -> String
-    where F: Fn(usize, & Captures) -> String {
+    fn replace<R>(&self, text: &str, mut rep: R) -> String
+    where R: Replacer {
 
         let mut iter = self.captures_iter(text).enumerate().peekable();
         if iter.peek().is_none() {
@@ -399,9 +449,10 @@ pub trait NativeRegex: Sized {
         let mut last_match = 0;
 
         for (i, capture) in iter {
-            let m = capture.get(0).unwrap();
+            let m = capture.first();
             new.push_str(&text[last_match..m.start]);
-            new.push_str(rep(i, & capture).as_str());
+            rep.replace_append(&capture, & mut new);
+            //new.push_str(rep(i, & capture).as_str());
             last_match = m.end;
         }
         new.push_str(&text[last_match..]);
@@ -478,7 +529,7 @@ impl<'t, 'r, R> Iterator for Matches<'t, 'r, R>
     fn next(&mut self) -> Option<Match<'t>> {
         match self.capture_match.next() {
             Some(capture) => {
-                Some(capture.get(0).unwrap())
+                Some(capture.first())
             }
             None => None
         }
@@ -550,6 +601,57 @@ impl<'t> Captures<'t> {
 
     pub fn len(&self) -> usize {
         self.locations.len()
+    }
+
+    pub fn expand(&self, mut replacement: &str, dst: &mut String) {
+        use crate::regexes::CaptureNameRegex;
+
+        let capture_reg = CaptureNameRegex::new();
+
+        while !replacement.is_empty() {
+
+            match capture_reg.captures(replacement) {
+                Some(captures) => {
+
+                    dst.push_str(&replacement[..captures.first().start]);
+
+
+                    let identifier = match captures.get(1) {
+                        Some(m) => {
+                            //If the first group matches, we have an escaped dollar sign, $$.
+                            replacement = &replacement[m.end..];
+                            "$"
+                        }
+                        None => {
+                            replacement = &replacement[captures.first().end..];
+                            match captures.get(2) {
+                                Some(m) => {
+                                    match m.as_str().parse::<usize>() {
+                                        Ok(number) => {
+                                            self.get(number).map(|x| x.as_str()).unwrap_or("")
+                                        }
+                                        Err(_) => {
+                                            self.name(m.as_str()).map(|x| x.as_str()).unwrap_or("")
+                                        }
+                                    }
+                                }
+                                None => {
+                                    ""
+                                }
+                            }
+                        }
+                    };
+
+                    dst.push_str(identifier);
+
+                }
+                None => {
+                    dst.push_str(replacement);
+                    break;
+                }
+            }
+
+        }
     }
 
 }

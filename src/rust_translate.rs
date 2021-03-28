@@ -252,11 +252,11 @@ impl native_regex_lib::native_regex::NativeRegex for {} {{
     }
 
     fn start_line_snippet() -> String {
-        format!("if current.unwrap().previous() != native_regex_lib::native_regex::Previous::Character(\"\\n\") || current.unwrap().previous() != native_regex_lib::native_regex::Previous::Start {{ return None; }}\n\n")
+        format!("if current.unwrap().previous() != native_regex_lib::native_regex::Previous::Character('\\n') && current.unwrap().previous() != native_regex_lib::native_regex::Previous::Start {{ return None; }}\n\n")
     }
 
     fn end_line_snippet() -> String {
         //format!("if current.unwrap().current() != native_regex_lib::native_regex::Previous::Character(\"\\n\") {{ return None; }}\n\n")
-        String::from("end line not implemented yet")
+        format!("if current.unwrap().previous() != native_regex_lib::native_regex::Previous::Character('\\n') && {{ {} current.is_some() }} {{ return None; }}\n\n", Self::advance())
     }
 }

@@ -5,24 +5,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 ### To Do
-- Add a support for `regex::Replacer`-like trait
+- Add `regex::Replacer` to readme and mention the differences (enclosing braces {} are mandatory to improve performance)
 - Create a web app (via WebAssembly) to convert regexes to source
 - Add examples
 - Add support for
-  - Anchors
   - Word boundaries
-  - Empty regexes
+    - Use `is` functions from `regex-syntax` crate
 - Add validator to rust compiler 
-- Use `is` functions from `regex-syntax` crate
 
 ### Unfinished Ideas
 - Try to identify regexes that use backtracking, and warn user that backtracking is not supported
-- Create an IR between the HIR and the outputted source code. Using something like
-  - For
-  - If
-  - Next - command to move to next character
-  - Declare - command to declare a variable and initialise it
-  - Insert - command to add to capture group
+- Create an even higher IR than HIR (EHIR) that uses commands like 
+  - If: Used to match character sets and literals
+  - LOOP: Used in repetition
+  - BLOCK: Code block (used to limit scope of temporary variables)
+  - ADVANCE: Advance to next character
+  - PREVIOUS, CURRENT, INDEX: Get the previous character, current character and index of current character  
+  - LOGICAL: Logical operators for IF statement
+    - AND
+    - OR
+    - NEGATE
+  - COMPARATIVE: Comparing characters
+  - ASSIGN & DECLARE: Initialising variables
+  - CONCAT: A series of blocks
+  - END: SHould return true if we're at the last character
+  - HASHMAP: Construct a hashmap given the HashMap<String, usize>
+
+## [0.3.2] - 2021-03-26
+
+### Added
+- Added NativeRegex of our own to parse Replacer strings
+- Support for `regex::Replacer`-like replacer object
+
+### Fixed
+- Start line and End line bugs fixed
 
 ## [0.3.1] - 2021-03-25
 
