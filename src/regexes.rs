@@ -1,9 +1,5 @@
 
-use crate::native_regex::Engine;
 use crate::native_regex::NativeRegex;
-
-
-// Regex used to replace strings according to a particular format
 pub struct CaptureNameRegex {
     named_groups: std::collections::HashMap<& 'static str, usize>
 }
@@ -32,39 +28,39 @@ impl crate::native_regex::NativeRegex for CaptureNameRegex {
 
     // Function to match regex '\$(\$)?(?:\{([^{}]*)\})?'
     #[allow(unused_parens, unused_comparisons)]
-    fn step(mut chars: crate::native_regex::CharOffsetIndices, length: usize) -> Option<Vec<Option<(usize, usize)>>> {
+    fn step(mut chars: crate::native_regex::character::CharOffsetIndices) -> Option<Vec<Option<(usize, usize)>>> {
 
         let mut captures = vec![None; 3];
 
         //Advance to first character & bounds check
-        let mut current = chars.next();
+        let mut character = chars.advance();
 
-        if current.is_none() { return None; }
+        if character.current().is_none() { return None; }
 
         //Zero capture
-        let capture_0_first = current.unwrap().index();
+        let capture_0_first = character.index();
 
-        if current.is_none() { return None; }
+        if character.current().is_none() { return None; }
 
-        if (current.unwrap().current() as u32) != 36 { return None; }
+        if (character.current().unwrap() as u32) != 36 { return None; }
 
-        current = chars.next();
+        character = chars.advance();
 
         {
             let mut match_count = 0;
 
-            while current.is_some() {
+            while character.current().is_some() {
                 {
 
-                    let capture_1_start = current.unwrap().index();
+                    let capture_1_start = character.index();
 
-                    if current.is_none() { return None; }
+                    if character.current().is_none() { return None; }
 
-                    if (current.unwrap().current() as u32) != 36 { break; }
+                    if (character.current().unwrap() as u32) != 36 { break; }
 
-                    current = chars.next();
+                    character = chars.advance();
 
-                    captures[1] = Some((capture_1_start, if current.is_some() { current.unwrap().index() } else { length }));
+                    captures[1] = Some((capture_1_start, character.index()));
 
                 }
 
@@ -77,48 +73,58 @@ impl crate::native_regex::NativeRegex for CaptureNameRegex {
                 }
             }
 
+            if match_count < 0 {
+                return None;
+            }
         }
 
         {
             let mut match_count = 0;
 
-            while current.is_some() {
+            while character.current().is_some() {
                 {
 
-                    if current.is_none() { return None; }
+                    if character.current().is_none() { return None; }
 
-                    if (current.unwrap().current() as u32) != 123 { break; }
+                    if (character.current().unwrap() as u32) != 123 { break; }
 
-                    current = chars.next();
+                    character = chars.advance();
 
                     {
 
-                        let capture_2_start = current.unwrap().index();
+                        let capture_2_start = character.index();
 
                         {
-                            while current.is_some() {
-                                if current.is_none() { return None; }
+                            let mut match_count = 0;
 
-                                if ((current.unwrap().current() as u32) < 0 || (current.unwrap().current() as u32) > 122) && (current.unwrap().current() as u32) != 124 && ((current.unwrap().current() as u32) < 126 || (current.unwrap().current() as u32) > 1114111) {
+                            while character.current().is_some() {
+                                if character.current().is_none() { return None; }
+
+                                if ((character.current().unwrap() as u32) < 0 || (character.current().unwrap() as u32) > 122) && (character.current().unwrap() as u32) != 124 && ((character.current().unwrap() as u32) < 126 || (character.current().unwrap() as u32) > 1114111) {
                                     break;
                                 }
 
-                                current = chars.next();
+                                character = chars.advance();
 
 
+
+                                match_count += 1;
                             }
 
+                            if match_count < 0 {
+                                break;
+                            }
                         }
 
-                        captures[2] = Some((capture_2_start, if current.is_some() { current.unwrap().index() } else { length }));
+                        captures[2] = Some((capture_2_start, character.index()));
 
                     }
 
-                    if current.is_none() { return None; }
+                    if character.current().is_none() { return None; }
 
-                    if (current.unwrap().current() as u32) != 125 { break; }
+                    if (character.current().unwrap() as u32) != 125 { break; }
 
-                    current = chars.next();
+                    character = chars.advance();
 
                 }
 
@@ -131,11 +137,14 @@ impl crate::native_regex::NativeRegex for CaptureNameRegex {
                 }
             }
 
+            if match_count < 0 {
+                return None;
+            }
         }
 
 
 
-        captures[0] = Some((capture_0_first, if current.is_some() { current.unwrap().index() } else { length }));
+        captures[0] = Some((capture_0_first, character.index()));
 
         return Some(captures)
     }

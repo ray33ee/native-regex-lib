@@ -26,17 +26,9 @@ pub trait Compiler {
 
     fn map_to_snippet(map: HashMap<String, usize>) -> String;
 
-    fn zero_and_one_to_snippet(inner_code: String) -> String;
+    fn bounded_to_snippet(inner_code: String, in_inner_loop: bool, n: usize, m: usize) -> String;
 
-    fn zero_or_more_to_snippet(inner_code: String) -> String;
-
-    fn one_or_more_to_snippet(inner_code: String, in_inner_loop: bool) -> String;
-
-    fn exactly_to_snippet(inner_code: String, in_inner_loop: bool, n: usize) -> String;
-
-    fn bound_to_snippet(inner_code: String, in_inner_loop: bool, n: usize, m: usize) -> String;
-
-    fn above_to_snippet(inner_code: String, in_inner_loop: bool, n: usize) -> String;
+    fn unbounded_to_snippet(inner_code: String, in_inner_loop: bool, n: usize) -> String;
 
     fn base_code(inner: String, capture_count: usize, struct_name: & str, regex: & str, map: HashMap<String, usize>) -> String ;
 
@@ -49,6 +41,15 @@ pub trait Compiler {
     fn start_line_snippet() -> String;
 
     fn end_line_snippet() -> String;
+
+    fn wordboundary_unicode(in_inner_loop: bool) -> String;
+
+    fn wordboundary_ascii(in_inner_loop: bool) -> String;
+
+    fn negate_wordboundary_unicode(in_inner_loop: bool) -> String;
+
+    fn negate_wordboundary_ascii(in_inner_loop: bool) -> String;
+
 
     fn translate_hir(hir: & Hir, capture_names: & mut HashMap<String, usize>, in_inner_loop: bool) -> Result<(String, Option<usize>), String> {
 
@@ -84,10 +85,10 @@ pub trait Compiler {
             },
             HirKind::Anchor(anchor) => match anchor {
                 Anchor::EndLine => {
-
+                    snippet = Self::end_line_snippet();
                 },
                 Anchor::EndText => {
-                    snippet = format!("{}{}", Self::advance(), Self::end_text_snippet());
+                    snippet = Self::end_text_snippet();
                 },
                 Anchor::StartLine => {
                     snippet = Self::start_line_snippet();
@@ -98,16 +99,22 @@ pub trait Compiler {
             },
             HirKind::WordBoundary(boundary) => match boundary {
                 WordBoundary::Unicode => {
-
+                    snippet =  Self::wordboundary_unicode(in_inner_loop);
                 }
                 WordBoundary::Ascii => {
 
+
+                    snippet =  Self::wordboundary_ascii(in_inner_loop);
                 }
                 WordBoundary::AsciiNegate => {
+
+                    snippet =  Self::negate_wordboundary_ascii(in_inner_loop);
 
                 }
                 WordBoundary::UnicodeNegate => {
 
+
+                    snippet =  Self::negate_wordboundary_unicode(in_inner_loop);
                 }
             },
             HirKind::Repetition(repeater) => {
@@ -129,23 +136,23 @@ pub trait Compiler {
 
                 snippet = match repeater.kind.clone() {
                     RepetitionKind::ZeroOrOne => {
-                        Self::zero_and_one_to_snippet(subset)
+                        Self::bounded_to_snippet(subset, in_inner_loop, 0, 1)
                     },
                     RepetitionKind::OneOrMore => {
-                        Self::one_or_more_to_snippet(subset, in_inner_loop)
+                        Self::unbounded_to_snippet(subset, in_inner_loop, 1)
                     },
                     RepetitionKind::ZeroOrMore => {
-                        Self::zero_or_more_to_snippet(subset)
+                        Self::unbounded_to_snippet(subset, in_inner_loop, 0)
                     },
                     RepetitionKind::Range(range) => match range {
                         RepetitionRange::AtLeast(n) => {
-                            Self::above_to_snippet(subset, in_inner_loop, n as usize)
+                            Self::unbounded_to_snippet(subset, in_inner_loop, n as usize)
                         },
                         RepetitionRange::Bounded(n, m) => {
-                            Self::bound_to_snippet(subset, in_inner_loop, n as usize, m as usize)
+                            Self::bounded_to_snippet(subset, in_inner_loop, n as usize, m as usize)
                         },
                         RepetitionRange::Exactly(n ) => {
-                            Self::exactly_to_snippet(subset, in_inner_loop, n as usize)
+                            Self::bounded_to_snippet(subset, in_inner_loop, n as usize, n as usize)
                         }
                     },
 

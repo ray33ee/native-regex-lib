@@ -11,25 +11,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Add support for
   - Word boundaries
     - Use `is` functions from `regex-syntax` crate
+  - Endline anchor
 - Add validator to rust compiler 
+- Push strings to a mutable String instead of concatenating strings in rust_translate.rs
+- `Replacer`: Allow closures and strings that reference the nth replacement 
+- Optimise the searching of literal strings
+  - Do this by searching for `Concat` tokens in the `HirKind` enums and looking for literals that are side-by-side
 
 ### Unfinished Ideas
 - Try to identify regexes that use backtracking, and warn user that backtracking is not supported
-- Create an even higher IR than HIR (EHIR) that uses commands like 
-  - If: Used to match character sets and literals
-  - LOOP: Used in repetition
-  - BLOCK: Code block (used to limit scope of temporary variables)
-  - ADVANCE: Advance to next character
-  - PREVIOUS, CURRENT, INDEX: Get the previous character, current character and index of current character  
-  - LOGICAL: Logical operators for IF statement
-    - AND
-    - OR
-    - NEGATE
-  - COMPARATIVE: Comparing characters
-  - ASSIGN & DECLARE: Initialising variables
-  - CONCAT: A series of blocks
-  - END: SHould return true if we're at the last character
-  - HASHMAP: Construct a hashmap given the HashMap<String, usize>
+- Create an even higher IR than HIR (EHIR) 
+  - Make sure EHIR has pseudocode-like commands 
+  - It also contains information on the list of capture names
+
+## [0.3.3] - 2021-03-28
+
+### Added
+- Since all repeaters fall into two categories, bounded or unbounded, there are now only two repeater functions that handle all types
+- `is_word_byte` and `is_word_byte` added to `NativeRegex` as wrappers around their `regex-syntax` counterparts
+- Required methods added to compiler class for word boundaries 
+- Support for anchors and word boundaries
+
+### Changed
+- native_regex.rs now split up into multiple rust files to aid readability
+- `SetMatches` implemented as a hashmap not a vector
+- Modified `CharOffsetIndices` away from the iterator pattern so we can iterate past the end of a string (such that the previous character past the end is the last character )
 
 ## [0.3.2] - 2021-03-26
 
