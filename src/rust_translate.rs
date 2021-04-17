@@ -1,270 +1,288 @@
 
+
+use crate::ehir::{Ehir, Token, Decision, NoMatch, Modifier, AnchorLocation, AnchorType, WordBoundaryType, Range};
 use std::collections::HashMap;
-use std::ops::RangeInclusive;
+use std::borrow::Borrow;
 
-pub struct RustCompiler;
 
-impl crate::compiler::Compiler for RustCompiler {
+fn range_to_snippet(range: & Range, code: & mut String) {
 
-    fn no_match_break(in_inner_loop: bool) -> & 'static str {
-        if in_inner_loop { "break;" } else { "return None;" }
+    match range {
+        Range::Single(n) => {
+            code.push_str("(character.current().unwrap() as u32) == ");
+            code.push_str(format!("{}", n).as_str());
+        }
+        Range::Multiple(n, m) => {
+
+            code.push_str("((character.current().unwrap() as u32) >= ");
+            code.push_str(format!("{}", n).as_str());
+            code.push_str(" && (character.current().unwrap() as u32) <= ");
+            code.push_str(format!("{}", m).as_str());
+
+            code.push_str(")");
+        }
     }
+}
 
-    //Advance
-    fn advance() -> & 'static str {
-        "character = chars.advance();\n\n"
+//Take a single token and convert it into a snippet of Rust code
+fn translate_token(token: & Token, code: & mut String) -> Result<(), String> {
+    match token {
+        Token::If(modifier, decision, stop_or_break) => {
+            code.push_str("if ");
+
+            //Decision
+            match decision {
+                Decision::CharacterSet(range_list) => {
+                    let mut range_list = range_list.into_iter();
+
+                    range_to_snippet(range_list.next().unwrap(), code);
+
+                    for range in range_list {
+                        code.push_str(" || ");
+                        range_to_snippet(range, code);
+                    }
+                }
+                Decision::Literal(character) => {
+                    code.push_str("(character.current().unwrap() as u32) == ");
+                    code.push_str(format!("{}", character).as_str());
+
+                }
+                Decision::LiteralString(_) => {
+                    return Err(String::from("Literal strings not supported yet."));
+                }
+                Decision::CountEquals(n) => {
+                    code.push_str("match_count == ");
+                    code.push_str(format!("{}", n).as_str());
+                }
+                Decision::CountLessThan(n) => {
+                    code.push_str("match_count < ");
+                    code.push_str(format!("{}", n).as_str());
+                }
+                Decision::Anchor(anchor_type, anchor_location) => {
+                    match anchor_location {
+                        AnchorLocation::Start => {
+                            match anchor_type {
+                                AnchorType::Regular => {
+                                    code.push_str("character.previous() == native_regex_lib::native_regex::character::Previous::Start");
+                                }
+                                AnchorType::Newline => {
+                                    code.push_str("character.previous() == native_regex_lib::native_regex::character::Previous::Character('\\n') || character.previous() == native_regex_lib::native_regex::character::Previous::Start");
+                                }
+                            }
+                        }
+                        AnchorLocation::End => {
+                            match anchor_type {
+                                AnchorType::Regular => {
+                                    code.push_str("character.current().is_none()");
+                                }
+                                AnchorType::Newline => {
+                                    code.push_str("{ if character.current().is_some() { if character.current().unwrap() != '\\n' { false } else { true } } else { true } }");
+                                }
+                            }
+                        }
+                    }
+                }
+                Decision::WordBoundary(boundary_type) => {
+                    match boundary_type {
+                        WordBoundaryType::Byte => {
+                            code.push_str("{ if character.previous() != native_regex_lib::native_regex::character::Previous::Start && character.current().is_some() {
+    if (Self::is_word_byte(character.previous().unwrap()) || !Self::is_word_byte(character.current().unwrap())) &&
+        (!Self::is_word_byte(character.previous().unwrap()) || Self::is_word_byte(character.current().unwrap())) {
+        false
+    } else {
+        true
     }
-
-    //If(Is, End, Stop)
-    fn bounds_check() -> & 'static str {
-        "if character.current().is_none() { return None; }\n\n"
+} else {
+    if character.previous() == native_regex_lib::native_regex::character::Previous::Start && !Self::is_word_byte(character.current().unwrap()) || character.current().is_none() && !Self::is_word_byte(character.previous().unwrap()) {
+        false
+    } else {
+        true
     }
-
-    //Empty
-    fn empty() -> String {
-        String::new()
+} }");
+                        }
+                        WordBoundaryType::Character => {
+                            code.push_str("{ if character.previous() != native_regex_lib::native_regex::character::Previous::Start && character.current().is_some() {
+    if (Self::is_word_character(character.previous().unwrap()) || !Self::is_word_character(character.current().unwrap())) &&
+        (!Self::is_word_character(character.previous().unwrap()) || Self::is_word_character(character.current().unwrap())) {
+        false
+    } else {
+        true
     }
-
-    //If(Not, Literal(_), Stop or Break)
-    fn literal_to_snippet(ch: u32, in_inner_loop: bool) -> String {
-        format!("if (character.current().unwrap() as u32) != {} {{ {} }}\n\n", ch, Self::no_match_break(in_inner_loop))
+} else {
+    if character.previous() == native_regex_lib::native_regex::character::Previous::Start && !Self::is_word_character(character.current().unwrap()) || character.current().is_none() && !Self::is_word_character(character.previous().unwrap()) {
+        false
+    } else {
+        true
     }
-
-    fn range_to_snippet(range: RangeInclusive<u32>, is_first_and_only: bool) -> String {
-        let (start, end) = range.into_inner();
-
-        if start == end {
-            format!("(character.current().unwrap() as u32) != {}", start)
-        } else {
-            if is_first_and_only {
-                format!("(character.current().unwrap() as u32) < {} || (character.current().unwrap() as u32) > {}", start, end)
-            } else {
-                format!("((character.current().unwrap() as u32) < {} || (character.current().unwrap() as u32) > {})", start, end)
+} }");
+                        }
+                    }
+                }
+                Decision::Middle => {
+                    code.push_str("character.current().is_some()");
+                }
             }
 
+            //Cheaty invert the logic by using else
+            if *modifier == Modifier::Not {
+                code.push_str(" {  } else ");
+            }
+
+            //Body
+            code.push_str(" { ");
+            code.push_str(match stop_or_break {
+                NoMatch::Stop => {
+                    "return None;"
+                }
+                NoMatch::Break => {
+                    "break;"
+                }
+            });
+            code.push_str(" }\n\n");
         }
-    }
+        Token::While(decision, block) => {
 
-    //If(Not, CharacterSet(_), Stop or Break)
-    fn class_to_snippet(ranges: Vec<RangeInclusive<u32>>, in_inner_loop: bool) -> String {
+            code.push_str("while ");
 
-        let mut ranges = ranges.into_iter();
+            match decision {
+                Decision::Middle => {
+                    code.push_str("character.current().is_some() ")
+                }
+                _ => { unreachable!() }
+            }
 
-        let mut str_ranges = Self::range_to_snippet(ranges.next().unwrap(), false);
-
-        for range in ranges {
-            str_ranges.push_str(" && ");
-            str_ranges.push_str(&Self::range_to_snippet(range, false));
+            translate_token(block.as_ref(), code)?;
         }
-
-        format!("if {} {{\n {} \n}}\n\n", str_ranges, Self::no_match_break(in_inner_loop))
-    }
-
-    //Block(...)
-    fn non_capturing_to_snippet(snippet: String) -> String {
-        format!("{{\n\n{}}}\n\n", snippet)
-    }
-
-    //Block(CaptureBeginning, ..., CaptureEnd)
-    fn capturing_to_snippet(ind: u32, snippet: String) -> String {
-        let capture_start = format!("let capture_{}_start = character.index();\n\n", ind);
-        let capture_end = format!("captures[{}] = Some((capture_{}_start, character.index()));\n\n", ind, ind);
-
-        format!("{{\n\n{}{}{}}}\n\n", capture_start, snippet, capture_end)
-    }
-
-    //Not a token. Just return a bunch of (index, & str) pairs
-    fn map_to_snippet(map: HashMap<String, usize>) -> String {
-        let mut snippet = String::new();
-
-        //named_groups.insert("name", 23);
-
-        for (name, index) in map {
-            snippet.push_str(&format!("named_groups.insert(\"{}\", {});\n", name, index));
+        Token::StartCount => {
+            code.push_str("let mut match_count = 0;\n\n");
         }
+        Token::IncrementCount => {
+            code.push_str("match_count += 1;\n\n");
+        }
+        Token::Advance => {
+            code.push_str("character = chars.advance();\n\n");
+        }
+        Token::Capture(index, token_list) => {
+            let index = format!("{}", index);
 
-        snippet
+            //Start of capture
+            code.push_str("let capture_");
+            code.push_str(index.as_str());
+            code.push_str("_start = character.index();\n\n");
+
+            //Capture body
+            for element in token_list {
+                translate_token(element, code)?;
+            }
+
+            //End of capture
+            code.push_str("captures[");
+            code.push_str(index.as_str());
+            code.push_str("] = Some((capture_");
+            code.push_str(index.as_str());
+            code.push_str("_start, character.index()));\n\n");
+        }
+        Token::Block(token_list) => {
+            code.push_str("{\n\n");
+
+            for element in token_list {
+                translate_token(element, code)?;
+            }
+
+            code.push_str("}\n\n")
+        }
+        Token::Empty => {}
     }
+    Ok(())
+}
 
-
-    //Block(StartCount, While(..., IncrementCount, If(Is, CountEquals(m), Break)), If(Is, CountLessThen(n), Stop or Break))
-    fn bounded_to_snippet(inner_code: String, in_inner_loop: bool, n: usize, m: usize) -> String {
-        format!("{{
-    let mut match_count = 0;
-
-    while character.current().is_some() {{
-        {}
-
-        match_count += 1;
-
-        if match_count == {} {{
-            break;
-        }}
-    }}
-
-    if match_count < {} {{
-        {}
-    }}
-}}\n\n", inner_code, m, n, Self::no_match_break(in_inner_loop))
+//Not a token. Just return a bunch of (index, & str) pairs
+fn map_to_snippet(map: & HashMap<String, u32>, code: & mut String) {
+    for (name, index) in map {
+        code.push_str(format!("named_groups.insert(\"{}\", {});\n", name, index).as_str());
     }
+}
 
-    //Block(StartCount, While(..., IncrementCount), If(Is, CountLessThen(n), Stop or Break))
-    fn unbounded_to_snippet(inner_code: String, in_inner_loop: bool, n: usize) -> String {
-        format!("{{
-    let mut match_count = 0;
+fn translate_ehir(ehir: & Ehir, struct_name: & str) -> Result<String, String> {
+    let mut code = String::new();
 
-    while character.current().is_some() {{
-        {}
-
-        match_count += 1;
-    }}
-
-    if match_count < {} {{
-        {}
-    }}
-}}\n\n", inner_code, n, Self::no_match_break(in_inner_loop))
-    }
-
-    fn base_code(inner: String, capture_count: usize, struct_name: & str, regex: & str, map: HashMap<String, usize>) -> String {
-
-
-
-        format!("
-pub struct {} {{
+    code.push_str("pub struct ");
+    code.push_str(struct_name);
+    code.push_str(" {
     named_groups: std::collections::HashMap<& 'static str, usize>
-}}
+}
 
-impl {} {{
-    pub fn new() -> Self {{
-        let {}named_groups = std::collections::HashMap::new();
+impl ");
+    code.push_str(struct_name);
+    code.push_str(" {
+    pub fn new() -> Self {
+        let ");
+    if !ehir._capture_names.is_empty() {
+        code.push_str("mut ")
+    }
+    code.push_str("named_groups = std::collections::HashMap::new();
 
-        {}
+        ");
+    map_to_snippet( & ehir._capture_names, &mut  code);
+    code.push_str("
 
-        {} {{
+        ");
+    code.push_str(struct_name);
+    code.push_str(" {
             named_groups
-        }}
-    }}
-}}
+        }
+    }
+}
 
-impl Into<native_regex_lib::native_regex::Engine> for {} {{
+impl Into<native_regex_lib::native_regex::Engine> for ");
+    code.push_str(struct_name);
+    code.push_str(" {
 
-    fn into(self) -> native_regex_lib::native_regex::Engine {{
+    fn into(self) -> native_regex_lib::native_regex::Engine {
         self.engine()
-    }}
+    }
 
-}}
+}
 
-impl native_regex_lib::native_regex::NativeRegex for {} {{
+impl native_regex_lib::native_regex::NativeRegex for ");
+    code.push_str(struct_name);
+    code.push_str(" {
 
-    // Function to match regex '{}'
+    // Function to match regex '");
+    code.push_str(ehir._regex);
+    code.push_str("'
     #[allow(unused_parens, unused_comparisons)]
-    fn step(mut chars: native_regex_lib::native_regex::character::CharOffsetIndices) -> Option<Vec<Option<(usize, usize)>>> {{
+    fn step(mut chars: native_regex_lib::native_regex::character::CharOffsetIndices) -> Option<Vec<Option<(usize, usize)>>> {
 
-        let mut captures = vec![None; {}];
+        let mut captures = vec![None; ");
+    code.push_str(format!("{}", ehir._capture_count).as_str());
+    code.push_str("];
 
         //Advance to first character & bounds check
         let mut character = chars.advance();
 
-        if character.current().is_none() {{ return None; }}
+        ");
 
-        //Zero capture
-        let capture_0_first = character.index();
+    for element in ehir._tokens.iter() {
+        translate_token(element, & mut code)?;
+    }
 
-        {}
-
-        captures[0] = Some((capture_0_first, character.index()));
+    code.push_str("
 
         return Some(captures)
-    }}
+    }
 
-    fn capture_names(&self) -> &std::collections::HashMap<& 'static str, usize> {{
+    fn capture_names(&self) -> &std::collections::HashMap<& 'static str, usize> {
         &self.named_groups
-    }}
-
-
-}}
-", struct_name, struct_name, if map.is_empty() {""} else {"mut "}, Self::map_to_snippet(map), struct_name, struct_name, struct_name, regex, capture_count, inner)
-    }
-
-    fn name_identifier_validator(_identifier: & str) -> Result<(), String> {
-        Ok(())
-    }
-
-    //If(Not, Anchor(Regular, Start), Stop)
-    fn start_text_snippet() -> String {
-        format!("if character.previous() != native_regex_lib::native_regex::character::Previous::Start {{ return None; }}\n\n")
-    }
-
-    //If(Not, Anchor(Regular, End), Stop)
-    fn end_text_snippet() -> String {
-        format!("if character.current().is_some() {{ return None; }}\n\n")
-    }
-
-    //If(Not, Anchor(Newline, Start), Stop)
-    fn start_line_snippet() -> String {
-        format!("if character.previous() != native_regex_lib::native_regex::character::Previous::Character('\\n') && character.previous() != native_regex_lib::native_regex::character::Previous::Start {{ return None; }}\n\n")
-    }
-
-    //If(Not, Anchor(Newline, End), Stop)
-    fn end_line_snippet() -> String {
-        format!("if character.current().is_some() {{ if character.current().unwrap() != '\\n' {{ return None; }} }}\n\n")
-
-    }
-
-    fn wordboundary_unicode(in_inner_loop: bool) -> String {
-        format!("
-if character.previous() != native_regex_lib::native_regex::character::Previous::Start && character.current().is_some() {{
-    if (Self::is_word_character(character.previous().unwrap()) || !Self::is_word_character(character.current().unwrap())) &&
-        (!Self::is_word_character(character.previous().unwrap()) || Self::is_word_character(character.current().unwrap())) {{
-        {}
-    }}
-}} else {{
-    if character.previous() == native_regex_lib::native_regex::character::Previous::Start && !Self::is_word_character(character.current().unwrap()) || character.current().is_none() && !Self::is_word_character(character.previous().unwrap()) {{
-        {}
-    }}
-}}", Self::no_match_break(in_inner_loop), Self::no_match_break(in_inner_loop))
-    }
-
-    fn wordboundary_ascii(in_inner_loop: bool) -> String {
-        format!("
-if character.previous() != native_regex_lib::native_regex::character::Previous::Start && character.current().is_some() {{
-    if (Self::is_word_byte(character.previous().unwrap()) || !Self::is_word_byte(character.current().unwrap())) &&
-        (!Self::is_word_byte(character.previous().unwrap()) || Self::is_word_byte(character.current().unwrap())) {{
-        {}
-    }}
-}} else {{
-    if character.previous() == native_regex_lib::native_regex::character::Previous::Start && !Self::is_word_byte(character.current().unwrap()) || character.current().is_none() && !Self::is_word_byte(character.previous().unwrap()) {{
-        {}
-    }}
-}}", Self::no_match_break(in_inner_loop), Self::no_match_break(in_inner_loop))
     }
 
 
-    fn negate_wordboundary_unicode(in_inner_loop: bool) -> String {
-        format!("
-if character.previous() != native_regex_lib::native_regex::character::Previous::Start && character.current().is_some() {{
-    if (Self::is_word_character(character.previous().unwrap()) || !Self::is_word_character(character.current().unwrap())) &&
-        (!Self::is_word_character(character.previous().unwrap()) || Self::is_word_character(character.current().unwrap())) {{
+}");
 
-    }} else {{ {} }}
-}} else {{
-    if character.previous() == native_regex_lib::native_regex::character::Previous::Start && !Self::is_word_character(character.current().unwrap()) || character.current().is_none() && !Self::is_word_character(character.previous().unwrap()) {{
 
-    }} else {{ {} }}
-}}", Self::no_match_break(in_inner_loop), Self::no_match_break(in_inner_loop))
-    }
+    Ok(code)
+}
 
-    fn negate_wordboundary_ascii(in_inner_loop: bool) -> String {
-        format!("
-if character.previous() != native_regex_lib::native_regex::character::Previous::Start && character.current().is_some() {{
-    if (Self::is_word_byte(character.previous().unwrap()) || !Self::is_word_byte(character.current().unwrap())) &&
-        (!Self::is_word_byte(character.previous().unwrap()) || Self::is_word_byte(character.current().unwrap())) {{
-
-    }} else {{ {} }}
-}} else {{
-    if character.previous() == native_regex_lib::native_regex::character::Previous::Start && !Self::is_word_byte(character.current().unwrap()) || character.current().is_none() && !Self::is_word_byte(character.previous().unwrap()) {{
-
-    }} else {{ {} }}
-}}", Self::no_match_break(in_inner_loop), Self::no_match_break(in_inner_loop))
-    }
+pub fn translate(regex: & str, identifier_name: & str) -> Result<String, String> {
+    translate_ehir(Ehir::translate(regex)?.borrow(), identifier_name)
 }

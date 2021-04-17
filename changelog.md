@@ -8,21 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Add `regex::Replacer` to readme and mention the differences (enclosing braces {} are mandatory to improve performance)
 - Create a web app (via WebAssembly) to convert regexes to source
 - Add examples
-- Add support for
-  - Word boundaries
-    - Use `is` functions from `regex-syntax` crate
-  - Endline anchor
 - Add validator to rust compiler 
-- Push strings to a mutable String instead of concatenating strings in rust_translate.rs
 - `Replacer`: Allow closures and strings that reference the nth replacement 
 - Optimise the searching of literal strings
   - Do this by searching for `Concat` tokens in the `HirKind` enums and looking for literals that are side-by-side
 
 ### Unfinished Ideas
 - Try to identify regexes that use backtracking, and warn user that backtracking is not supported
-- Create an even higher IR than HIR (EHIR) 
-  - Make sure EHIR has pseudocode-like commands 
-  - It also contains information on the list of capture names
+
+## [0.3.4] - 2021-04-15
+
+### Added
+- `Ehir::translate` to convert regex-syntax `Hir` into a pseudocode-like IR 
+- rust_translate.rs now uses `Ehir` to create source code
+- Character in `Ehir` stored as u32
+- Capture group indices stored as u32
+- Extra information on regex stored within `Ehir`
+  - Original string regex
+  - Hash map of capture names and indices
+  - Total capture count
+
+### Removed
+- Compiler trait removed in favour of `Ehir`
+- We work with references to `String` instead of moving `String`s around
 
 ## [0.3.3] - 2021-03-28
 
