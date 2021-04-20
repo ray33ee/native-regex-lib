@@ -4,11 +4,13 @@ pub mod replacer;
 pub mod native_regex_set;
 
 use captures::{Captures, CaptureMatches, Match, Matches};
-use character::{CharOffsetIndices, CharIterIterIndex};
 use replacer::Replacer;
 use crate::native_regex::captures::NativeRegexLocations;
+use character::{Advancer, AdvancerIterator};
 
 use std::collections::HashMap;
+use crate::vectormap::VectorMap;
+
 
 pub type NativeRegexReturn<'a> = Option<NativeRegexLocations>;
 
@@ -21,13 +23,18 @@ pub struct Split<'t, 'r, R>
 
 #[derive(Clone)]
 pub struct Engine {
-    regex: fn (chars: CharOffsetIndices) -> Option<Vec<Option<(usize, usize)>>>,
-    named_groups: HashMap<& 'static str, usize>
+    regex: fn (chars: Advancer, captures: & mut VectorMap<(usize, usize)>) -> Option<()>,
+    named_groups: HashMap<& 'static str, usize>,
+    capture_count: usize,
+}
+
+impl Engine {
+    pub fn capture_count(&self) -> usize { self.capture_count }
 }
 
 pub trait NativeRegex: Sized {
 
-    fn step(chars: CharOffsetIndices) -> Option<Vec<Option<(usize, usize)>>>;
+    fn step(chars: Advancer, captures: & mut VectorMap<(usize, usize)>) -> Option<()>;
 
     fn is_word_byte(byte: u8) -> bool {
         regex_syntax::is_word_byte(byte)
@@ -39,22 +46,31 @@ pub trait NativeRegex: Sized {
 
     fn capture_names(&self) -> &HashMap<& 'static str, usize>;
 
+    fn capture_count(&self) -> usize;
+
     fn engine(&self) -> Engine {
         Engine {
             regex: Self::step,
-            named_groups: self.capture_names().clone()
+            named_groups: self.capture_names().clone(),
+            capture_count: self.capture_count(),
         }
     }
 
+    #[inline(always)]
     fn regex_function(&self, str_text: &str, start: usize) -> NativeRegexReturn {
 
-        for it in CharIterIterIndex::new(str_text, start) {
-            match Self::step(it) {
-                Some(op) => {
-                    return Some(op);
+        let mut captures = VectorMap::new(self.capture_count());
+
+        for it in AdvancerIterator::new(str_text, start) {
+
+            match Self::step(it, & mut captures) {
+                Some(_) => {
+                    return Some(captures);
                 }
                 None => {}
             }
+
+            captures.clear();
         }
         None
     }
@@ -66,9 +82,9 @@ pub trait NativeRegex: Sized {
     fn find<'t>(&self, text: & 't str) -> Option<Match<'t>> {
         match self.regex_function(text, 0) {
             Some(matches) => {
-                let (start, end) = matches.get(0).unwrap().unwrap();
+                let (start, end) = matches.get(0).unwrap();
                 Some(Match::new (
-                    text, start, end
+                    text, *start, *end
                 ))
             }
             None => None
@@ -87,8 +103,9 @@ pub trait NativeRegex: Sized {
             Some(captures) => {
                 Some(Captures {
                     text,
+                    count: captures.len(),
                     locations: captures,
-                    named_groups: self.capture_names().clone()
+                    named_groups: self.capture_names().clone(),
                 })
             }
             None => None

@@ -1,5 +1,6 @@
 
 use crate::native_regex::NativeRegex;
+
 pub struct CaptureNameRegex {
     named_groups: std::collections::HashMap<& 'static str, usize>
 }
@@ -28,9 +29,8 @@ impl crate::native_regex::NativeRegex for CaptureNameRegex {
 
     // Function to match regex '\$(\$)?(?:\{([^{}]*)\})?'
     #[allow(unused_parens, unused_comparisons)]
-    fn step(mut chars: crate::native_regex::character::CharOffsetIndices) -> Option<Vec<Option<(usize, usize)>>> {
+    fn step(mut chars: crate::native_regex::character::Advancer, captures: & mut crate::vectormap::VectorMap<(usize, usize)>) -> Option<()> {
 
-        let mut captures = vec![None; 3];
 
         //Advance to first character & bounds check
         let mut character = chars.advance();
@@ -60,7 +60,7 @@ impl crate::native_regex::NativeRegex for CaptureNameRegex {
 
                     character = chars.advance();
 
-                    captures[1] = Some((capture_1_start, character.index()));
+                    captures.insert(1, (capture_1_start, character.index()));
 
                 }
 
@@ -116,7 +116,7 @@ impl crate::native_regex::NativeRegex for CaptureNameRegex {
                             }
                         }
 
-                        captures[2] = Some((capture_2_start, character.index()));
+                        captures.insert(2, (capture_2_start, character.index()));
 
                     }
 
@@ -144,14 +144,15 @@ impl crate::native_regex::NativeRegex for CaptureNameRegex {
 
 
 
-        captures[0] = Some((capture_0_first, character.index()));
+        captures.insert(0, (capture_0_first, character.index()));
 
-        return Some(captures)
+        return Some(())
     }
 
     fn capture_names(&self) -> &std::collections::HashMap<& 'static str, usize> {
         &self.named_groups
     }
 
+    fn capture_count(&self) -> usize { 3 }
 
 }

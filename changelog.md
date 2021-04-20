@@ -8,13 +8,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Add `regex::Replacer` to readme and mention the differences (enclosing braces {} are mandatory to improve performance)
 - Create a web app (via WebAssembly) to convert regexes to source
 - Add examples
+  - Example using regset and use list slice matching too
 - Add validator to rust compiler 
 - `Replacer`: Allow closures and strings that reference the nth replacement 
-- Optimise the searching of literal strings
-  - Do this by searching for `Concat` tokens in the `HirKind` enums and looking for literals that are side-by-side
+- Make sure that a regex like 'it' matches 'ititi' and doesn't bail because of the final 'i'
 
 ### Unfinished Ideas
 - Try to identify regexes that use backtracking, and warn user that backtracking is not supported
+- Make an interpreter for Ehir
+
+## [0.4.0] - 2021-04-17
+
+### Added
+- `character.rs` functions are now inline, massively improving performance
+- Custom object `VectorMap` used to store the capture results efficiently
+
+### Changed
+- `character.rs` iterators now renamed to more meaningful names
+- The main `character.rs` iterator no longer uses the unsafe `from_utf8_unchecked` function to get the next `Advancer`
+
+### Fixed
+- Fixed various changes
 
 ## [0.3.4] - 2021-04-15
 

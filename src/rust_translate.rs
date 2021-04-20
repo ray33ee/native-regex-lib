@@ -176,9 +176,9 @@ fn translate_token(token: & Token, code: & mut String) -> Result<(), String> {
             }
 
             //End of capture
-            code.push_str("captures[");
+            code.push_str("captures.insert(");
             code.push_str(index.as_str());
-            code.push_str("] = Some((capture_");
+            code.push_str(", (capture_");
             code.push_str(index.as_str());
             code.push_str("_start, character.index()));\n\n");
         }
@@ -252,11 +252,8 @@ impl native_regex_lib::native_regex::NativeRegex for ");
     code.push_str(ehir._regex);
     code.push_str("'
     #[allow(unused_parens, unused_comparisons)]
-    fn step(mut chars: native_regex_lib::native_regex::character::CharOffsetIndices) -> Option<Vec<Option<(usize, usize)>>> {
-
-        let mut captures = vec![None; ");
-    code.push_str(format!("{}", ehir._capture_count).as_str());
-    code.push_str("];
+    #[inline(always)]
+    fn step(mut chars: native_regex_lib::native_regex::character::Advancer, captures: & mut native_regex_lib::vectormap::VectorMap<(usize, usize)>) -> Option<()> {
 
         //Advance to first character & bounds check
         let mut character = chars.advance();
@@ -269,13 +266,16 @@ impl native_regex_lib::native_regex::NativeRegex for ");
 
     code.push_str("
 
-        return Some(captures)
+        Some(())
     }
 
     fn capture_names(&self) -> &std::collections::HashMap<& 'static str, usize> {
         &self.named_groups
     }
 
+    fn capture_count(&self) -> usize { ");
+    code.push_str(format!("{}", ehir._capture_count).as_str());
+    code.push_str(" }
 
 }");
 

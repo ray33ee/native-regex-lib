@@ -1,9 +1,7 @@
 
 use std::collections::HashMap;
-use std::ops::RangeInclusive;
 use regex_syntax::hir::*;
 use regex_syntax::Parser;
-use std::hash::Hash;
 
 #[derive(Debug)]
 pub enum NoMatch {
@@ -314,7 +312,7 @@ impl<'r> Ehir<'r> {
             Ok(hir) => {
                 let mut map = HashMap::new();
                 let mut ehir_code = Vec::new();
-                let (mut inner, max) = Ehir::translate_hir(&hir, & mut map, false)?;
+                let (inner, max) = Ehir::translate_hir(&hir, & mut map, false)?;
 
                 ehir_code.push(Ehir::bounds_check());
 

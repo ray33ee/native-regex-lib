@@ -1,17 +1,18 @@
 
-
-pub type NativeRegexLocations = Vec<Option<(usize, usize)>>;
-
+use crate::vectormap::VectorMap;
 use std::collections::HashMap;
 use std::ops::Range;
 use crate::native_regex::NativeRegex;
 use std::vec::IntoIter;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+pub type NativeRegexLocations = VectorMap<(usize, usize)>;
+
+#[derive(Clone, Debug)]
 pub struct Captures<'t> {
     pub text: & 't str,
     pub locations: NativeRegexLocations,
-    pub named_groups: HashMap<& 'static str, usize>
+    pub named_groups: HashMap<& 'static str, usize>,
+    pub count: usize
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -73,25 +74,25 @@ impl<'t, 'r, R> Iterator for CaptureMatches<'t, 'r, R>
             Some(m) => m
         };
 
-        let (start, end) = locations.get(0).unwrap().unwrap();
+        let (start, end) = locations.get(0).unwrap();
 
         if start == end {
             self.last_end = end+1;
 
-            if self.last_match == Some(end) {
+            if self.last_match == Some(*end) {
                 return self.next()
             }
 
         } else {
-            self.last_end = end;
+            self.last_end = *end;
         }
 
-        self.last_match = Some(end);
+        self.last_match = Some(*end);
         Some(Captures {
             text: self.text,
+            count: locations.len(),
             locations,
-            named_groups: HashMap::new()
-
+            named_groups: HashMap::new(),
         })
 
     }
@@ -156,17 +157,16 @@ impl<'t> Captures<'t> {
 
     pub fn get(&self, i: usize) -> Option<Match<'t>> {
         match self.locations.get(i) {
-            Some(m) => match m {
-                Some((start, end)) => Some(Match::new(self.text, *start, *end)),
-                None => None
+            Some((start, end)) => {
+                Some(Match::new(self.text, *start, *end))
             }
             None => None
         }
     }
 
     pub fn first(&self) -> Match<'t> {
-        let (start, end) = self.locations.get(0).unwrap().unwrap();
-        Match::new(self.text, start, end)
+        let (start, end) = self.locations.get(0).unwrap();
+        Match::new(self.text, *start, *end)
     }
 
     pub fn name(&self, name: &str) -> Option<Match<'t>> {
@@ -177,6 +177,7 @@ impl<'t> Captures<'t> {
     }
 
     pub fn iter(& self) -> IntoIter<Option<Match>> {
+
         let thing: Vec<_> = self.locations.iter().map(|m| {
             match m {
                 Some((start, end)) => Some(Match::new(self.text, *start, *end)),
@@ -188,7 +189,7 @@ impl<'t> Captures<'t> {
     }
 
     pub fn len(&self) -> usize {
-        self.locations.len()
+        self.count
     }
 
     pub fn expand(&self, mut replacement: &str, dst: &mut String) {

@@ -1,9 +1,10 @@
 
 use crate::native_regex::Captures;
 use crate::native_regex::Engine;
-use crate::native_regex::character::CharIterIterIndex;
 use std::collections::{HashSet, HashMap};
 use std::collections::hash_map::Iter;
+use crate::native_regex::{AdvancerIterator};
+use crate::vectormap::VectorMap;
 
 #[derive(Debug)]
 pub struct SetMatches<'t> {
@@ -40,7 +41,8 @@ impl<'t> SetMatches<'t> {
 }
 
 pub struct NativeRegexSet {
-    engines: Vec<Engine>
+    engines: Vec<Engine>,
+    max_capture_count: usize
 }
 
 impl NativeRegexSet {
@@ -48,20 +50,27 @@ impl NativeRegexSet {
     pub fn new<I>(regexes: I) -> Self
         where I: IntoIterator<Item = Engine> {
 
-        let engines = regexes.into_iter().collect();
+        let engines = regexes.into_iter().collect::<Vec<_>>();
+
+        let max_capture_count = engines.iter().map(|engine| engine.capture_count ).max().unwrap();
 
         NativeRegexSet {
-            engines
+            engines,
+            max_capture_count
         }
     }
 
     pub fn is_match(&self, text: & str) -> bool {
 
-        for it in CharIterIterIndex::new(text, 0) {
+
+        let mut captures = VectorMap::new(self.max_capture_count);
+
+        for it in AdvancerIterator::new(text, 0) {
             for engine in self.engines.iter() {
-                if (engine.regex)(it.clone()).is_some() {
+                if (engine.regex)(it.clone(), & mut captures).is_some() {
                     return true;
                 }
+                captures.clear();
             }
         }
         false
@@ -74,7 +83,9 @@ impl NativeRegexSet {
 
         let mut finished_set = HashSet::new();
 
-        for it in CharIterIterIndex::new(text, 0) {
+        let mut captures = VectorMap::new(self.max_capture_count);
+
+        for it in AdvancerIterator::new(text, 0) {
 
             if finished_set.len() == self.engines.len() {
                 break;
@@ -83,14 +94,15 @@ impl NativeRegexSet {
             for (engine_index, engine) in self.engines.iter().enumerate() {
                 if !finished_set.contains(&engine_index) {
 
-                    match (engine.regex)(it.clone()) {
-                        Some(v) => {
+                    match (engine.regex)(it.clone(), & mut captures) {
+                        Some(_) => {
                             finished_set.insert(engine_index); //Flag the engine for removal
 
                             let caps = Captures {
                                 text,
                                 named_groups: engine.named_groups.clone(),
-                                locations: v.clone()
+                                locations: captures.clone(),
+                                count: engine.capture_count,
                             };
 
                             set_matches.matches.insert(engine_index, caps);
@@ -98,6 +110,7 @@ impl NativeRegexSet {
                         }
                         None => {}
                     }
+                    captures.clear();
                 }
             }
         }

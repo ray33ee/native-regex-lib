@@ -2,21 +2,24 @@
 use Previous::{Start, Character};
 use std::str::{CharIndices};
 
+//An iterator-like object that advances over a string providing character information via CharacterInfo
 #[derive(Clone)]
-pub struct CharOffsetIndices<'t> {
+pub struct Advancer<'t> {
     iter: CharIndices<'t>,
     prev: Previous,
-    offset: usize,
+    start: usize,
     length: usize,
 }
 
-pub struct CharIterIterIndex<'t> {
+//An iterator that iterates over a string and returns an Advancer for each character
+pub struct AdvancerIterator<'t> {
     text: & 't [u8],
     iter: CharIndices<'t>,
     prev: Previous,
     start: usize
 }
 
+//Enum representing the previous character or Start if at the beginning
 #[derive(Clone, Debug, Copy, PartialEq)]
 pub enum Previous {
     //The first character of a string has no previous, so we label it Start
@@ -26,6 +29,7 @@ pub enum Previous {
     Character(char)
 }
 
+//Contains information about a character, including the index, previous character, and the actual character itself
 #[derive(Clone, Debug, Copy)]
 pub struct CharacterInfo {
     index: usize,
@@ -34,6 +38,7 @@ pub struct CharacterInfo {
 }
 
 impl Previous {
+    #[inline(always)]
     pub fn unwrap(&self) -> char {
         match self {
             Character(ch) => {
@@ -47,6 +52,7 @@ impl Previous {
 }
 
 impl CharacterInfo {
+    #[inline(always)]
     fn new(index: usize, current: Option<char>, previous: Previous) -> Self {
         CharacterInfo {
             index,
@@ -55,15 +61,21 @@ impl CharacterInfo {
         }
     }
 
+    #[inline(always)]
     pub fn index(&self) -> usize { self.index }
 
+    #[inline(always)]
     pub fn current(&self) -> Option<char> { self.current }
 
+    #[inline(always)]
     pub fn previous(&self) -> Previous { self.previous }
 }
 
-impl<'t> CharOffsetIndices<'t> {
+impl<'t> Advancer<'t> {
 
+    pub fn prev(&self) -> Previous { self.prev.clone() }
+
+    #[inline(always)]
     pub fn advance(& mut self) -> CharacterInfo {
 
         let prev = self.prev.clone();
@@ -73,7 +85,7 @@ impl<'t> CharOffsetIndices<'t> {
 
                 self.prev = Character(character);
 
-                CharacterInfo::new(index + self.offset, Some(character), prev)
+                CharacterInfo::new(index + self.start, Some(character), prev)
 
             }
             None => {
@@ -85,8 +97,9 @@ impl<'t> CharOffsetIndices<'t> {
 
 }
 
-impl<'t> CharIterIterIndex<'t> {
+impl<'t> AdvancerIterator<'t> {
 
+    #[inline(always)]
     pub fn new(text: & 't str, start: usize) -> Self {
 
         let bytes = text.as_bytes();
@@ -105,7 +118,7 @@ impl<'t> CharIterIterIndex<'t> {
 
 
         unsafe {
-            CharIterIterIndex {
+            AdvancerIterator {
                 text: bytes,
                 iter: std::str::from_utf8_unchecked(&bytes[start..]).char_indices(),
                 prev,
@@ -116,25 +129,26 @@ impl<'t> CharIterIterIndex<'t> {
 
 }
 
-impl<'t> Iterator for CharIterIterIndex<'t> {
-    type Item = CharOffsetIndices<'t>;
+impl<'t> Iterator for AdvancerIterator<'t> {
+    type Item = Advancer<'t>;
 
+    #[inline(always)]
     fn next(& mut self) -> Option<Self::Item> {
+
+        let iterator = self.iter.clone();
 
         let prev = self.prev.clone();
 
-        let (ind, ch) = self.iter.next()?;
+        let ch = self.iter.next()?.1;
 
         self.prev = Character(ch);
 
-        unsafe {
-            Some(CharOffsetIndices {
-                iter: std::str::from_utf8_unchecked(&self.text[ind + self.start..]).char_indices(),
-                prev,
-                offset: ind + self.start,
-                length: self.text.len()
-            })
-        }
+        Some(Advancer {
+            iter: iterator,
+            prev,
+            start: self.start,
+            length: self.text.len()
+        })
     }
 
 }
